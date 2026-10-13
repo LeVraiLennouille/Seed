@@ -40,15 +40,29 @@ const CIRC = 2 * Math.PI * 104;
 function save() { localStorage.setItem('pomodo_state', JSON.stringify(state)); }
 
 function init() {
+  const today = new Date().toISOString().split('T')[0];
+  if (state.timer.lastDate && state.timer.lastDate !== today) state.timer.sessions = 0;
+  state.timer.running = false;
   if (state.darkMode) { document.documentElement.setAttribute('data-dark','true'); document.getElementById('dark-toggle').checked = true; }
   if (!state.onboarded) { showRaw('onboarding'); }
-  else { document.getElementById('bottom-nav').style.display='flex'; showRaw(state.currentScreen==='onboarding'?'timer':state.currentScreen); }
+  else { showRaw(state.currentScreen==='onboarding'?'timer':state.currentScreen); }
+  applyModeUI();
   renderStreakDots();
+  renderSessionCount();
   renderTimerTasks();
   renderTasks();
   renderSettings();
   renderReports();
   updateTimerDisplay();
+}
+
+const MODE_LABELS = { focus:'Concentration', short:'Pause courte', long:'Pause longue' };
+function applyModeUI() {
+  const mode = state.timer.mode;
+  document.getElementById('app').dataset.mode = mode;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.id === 'tab-' + mode));
+  document.getElementById('timer-mode-label').textContent = MODE_LABELS[mode];
+  updatePlayIcon(false);
 }
 
 function showRaw(id) {
@@ -87,11 +101,11 @@ function nextSlide() {
     slides[obSlide].style.transform = 'translateX(-100%)';
     obSlide++;
     slides[obSlide].style.transform = 'translateX(0)';
-    document.querySelectorAll('.ob-dot').forEach((d,i) => {
+    document.querySelectorAll('#ob-dots i').forEach((d,i) => {
       d.classList.toggle('active', i === obSlide);
     });
     if (obSlide === slides.length - 1) {
-      document.getElementById('ob-btn').innerHTML = 'Commencer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
+      document.getElementById('ob-btn').textContent = 'Commencer';
     }
   } else {finishOnboarding();}
 }
@@ -100,7 +114,6 @@ function finishOnboarding() {
   state.onboarded = true;
   state.currentScreen = 'timer';
   save();
-  document.getElementById('bottom-nav').style.display = 'flex';
   showRaw('timer');
   renderTimerTasks();
   renderStreakDots();
@@ -109,19 +122,9 @@ function finishOnboarding() {
 function switchMode(mode, btn) {
   if (state.timer.running) { clearInterval(timerInterval); timerInterval = null; state.timer.running = false; }
   state.timer.mode = mode;
-  const d = state.timer.durations;
-  const mins = { focus: d.focus, short: d.short, long: d.long }[mode];
-  state.timer.timeLeft = mins * 60;
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  const labels = { focus:'FOCUS TIME', short:'PAUSE COURTE', long:'GRANDE PAUSE' };
-  document.getElementById('timer-mode-label').textContent = labels[mode];
-  const colors = { focus:'#E5534B', short:'#22C55E', long:'#3B82F6' };
-  document.getElementById('timer-ring').style.stroke = colors[mode];
-  document.getElementById('play-btn').style.background = colors[mode];
-  document.getElementById('play-btn').style.boxShadow = `0 4px 20px ${colors[mode]}66`;
+  state.timer.timeLeft = state.timer.durations[mode] * 60;
+  applyModeUI();
   updateTimerDisplay();
-  updatePlayIcon(false);
   save();
 }
 
@@ -152,20 +155,21 @@ function tick() {
 
 function updateTimerDisplay() {
   const t = state.timer.timeLeft;
-  const m = Math.floor(t/60);
-  const s = t % 60;
-  document.getElementById('timer-display').textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  const mode = state.timer.mode;
-  const d = state.timer.durations;
-  const total = { focus: d.focus*60, short: d.short*60, long: d.long*60 }[mode];
-  const progress = 1 - t / total;
-  document.getElementById('timer-ring').style.strokeDashoffset = CIRC * (1 - progress);
+  const mm = String(Math.floor(t/60)).padStart(2,'0');
+  const ss = String(t % 60).padStart(2,'0');
+  const el = document.getElementById('timer-display');
+  el.innerHTML = `<span class="dg">${mm[0]}</span><span class="dg">${mm[1]}</span><span class="co">:</span><span class="dg">${ss[0]}</span><span class="dg">${ss[1]}</span>`;
+  el.setAttribute('aria-label', `${+mm} minutes ${ss} secondes`);
+  const total = state.timer.durations[state.timer.mode] * 60;
+  const p = Math.min(1, Math.max(0, 1 - t / total));
+  document.getElementById('stem').style.strokeDashoffset = 1 - p;
+  [['leaf1',.3],['leaf2',.55],['leaf3',.8],['bud',.97]].forEach(([id,at]) => document.getElementById(id).classList.toggle('on', p >= at));
+  document.title = state.timer.running ? `${mm}:${ss} Seed` : 'Seed';
 }
 
 function updatePlayIcon(playing) {
-  document.getElementById('play-icon').outerHTML = playing
-    ? `<svg id="play-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`
-    : `<svg id="play-icon" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+  document.querySelector('#play-icon use').setAttribute('href', playing ? '#i-pause' : '#i-play');
+  document.getElementById('play-label').textContent = playing ? 'Pause' : (state.timer.timeLeft < state.timer.durations[state.timer.mode]*60 ? 'Reprendre' : 'Démarrer');
 }
 
 function skipTimer() {
@@ -193,15 +197,15 @@ function renderStreakDots() {
   const goal = state.timer.goal || 8;
   const done = state.timer.sessions;
   let html = '';
-  for (let i = 0; i < goal; i++) {
-    html += `<div class="streak-dot${i<done?' done':''}"></div>`;
-  }
-  document.getElementById('streak-dots').innerHTML = html;
+  for (let i = 0; i < goal; i++) html += `<i class="pod${i<done?' done':''}"></i>`;
+  const box = document.getElementById('streak-dots');
+  box.innerHTML = html;
+  box.setAttribute('aria-label', `${done} sessions sur ${goal} aujourd'hui`);
 }
 
 function renderSessionCount() {
   const n = state.timer.sessions;
-  document.getElementById('session-count').innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${n} session${n!==1?'s':''} complétée${n!==1?'s':''}</span>`;
+  document.getElementById('session-count').textContent = `${n} session${n>1?'s':''} aujourd'hui`;
 }
 
 function updateSessionIndicator() {}
@@ -225,17 +229,7 @@ function renderTimerTasks() {
   const empty = document.getElementById('empty-tasks');
   if (active.length === 0) { wrap.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
-  wrap.innerHTML = active.map(t => `
-    <div class="task-preview-card" onclick="showScreen('tasks')">
-      <div class="task-color-bar" style="background:${t.color}"></div>
-      <div class="task-info">
-        <div class="task-name">${esc(t.title)}</div>
-        <div class="task-meta">${t.cat} · ${t.subsDone}/${t.subs} sous-tâches</div>
-      </div>
-      <div class="task-check${t.done?' done':''}" onclick="event.stopPropagation();toggleTask(${t.id})">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-      </div>
-    </div>`).join('');
+  wrap.innerHTML = active.map(taskHTML).join('');
 }
 
 function renderTasks() {
@@ -244,36 +238,22 @@ function renderTasks() {
   document.getElementById('active-count').textContent = active.length;
   document.getElementById('done-count').textContent = done.length;
   const list = taskTab === 'active' ? active : done;
-  const emptyIcon = taskTab === 'active' ? '🎉' : '📭';
-  const emptyText = taskTab === 'active' ? 'Toutes les tâches sont terminées !' : 'Aucune tâche terminée';
-  document.getElementById('tasks-list').innerHTML = list.length ? list.map(taskHTML).join('') : `
-    <div style="text-align:center;padding:40px 20px;color:var(--muted);">
-      <div style="font-size:40px;margin-bottom:12px;">${emptyIcon}</div>
-      <div style="font-weight:700;font-size:15px;">${emptyText}</div>
-    </div>`;
+  const emptyText = taskTab === 'active' ? 'Tout est fait. Ajoutez une tâche pour la prochaine session.' : 'Aucune tâche terminée pour le moment.';
+  document.getElementById('tasks-list').innerHTML = list.length ? list.map(taskHTML).join('') : `<div class="empty"><p>${emptyText}</p></div>`;
 }
 
 function taskHTML(t) {
   const pct = t.subs > 0 ? Math.round(t.subsDone/t.subs*100) : 0;
-  const colors = { high:'#FEE2E2', normal:'#F1F5F9', low:'#F0FDF4' };
-  const textColors = { high:'#B91C1C', normal:'#475569', low:'#15803D' };
-  const labels = { high:'Urgent', normal:'Normal', low:'Faible' };
-  return `<div class="task-item">
-    <div class="task-cat-bar" style="background:${t.color}"></div>
-    <div class="task-body">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <div class="task-title" style="${t.done?'text-decoration:line-through;color:var(--muted);':''}">${esc(t.title)}</div>
-        <span class="task-priority" style="background:${colors[t.priority]};color:${textColors[t.priority]};flex-shrink:0;">${labels[t.priority]}</span>
-      </div>
-      <div class="task-tags"><span class="tag" style="background:${t.color}22;color:${t.color};">${t.cat}</span></div>
-      ${t.subs > 0 ? `<div class="task-progress">
-        <div class="progress-label">${t.subsDone}/${t.subs} sous-tâches · ${pct}%</div>
-        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${t.color};"></div></div>
-      </div>` : ''}
+  const sub = t.subs > 0 ? ` : ${t.subsDone} sur ${t.subs} sous-tâches` : '';
+  const urgent = t.priority === 'high' ? ' <em>Urgent</em>' : '';
+  return `<div class="row" onclick="showScreen('tasks')">
+    <span class="dot" style="background:${t.color}"></span>
+    <div class="info">
+      <div class="name${t.done?' off':''}">${esc(t.title)}</div>
+      <div class="meta">${esc(t.cat)}${sub}${urgent}</div>
+      ${t.subs > 0 ? `<div class="bar"><i style="width:${pct}%;background:${t.color}"></i></div>` : ''}
     </div>
-    <div class="task-done-check${t.done?' done':''}" onclick="toggleTask(${t.id})">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${t.done?'#fff':'var(--muted)'}" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-    </div>
+    <button class="check${t.done?' done':''}" onclick="event.stopPropagation();toggleTask(${t.id})" aria-label="${t.done?'Rouvrir':'Terminer'} la tâche"><svg><use href="#i-check"/></svg></button>
   </div>`;
 }
 
@@ -393,23 +373,16 @@ function renderReports() {
 }
 
 function renderWeekChart() {
-  const days = ['L','M','M','J','V','S','D'];
   const now = new Date();
-  const data = days.map((_,i)=>{
-    const d = new Date(now);
-    d.setDate(d.getDate() - (6-i));
+  const data = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i);
     const key = d.toISOString().split('T')[0];
-    return { label: days[i], val: state.history[key]||0 };
-  });
-  const max = Math.max(...data.map(d=>d.val), 1);
-  document.getElementById('week-chart').innerHTML = data.map(d=>`
-    <div class="chart-bar-item">
-      <span class="chart-bar-label">${d.label}</span>
-      <div class="chart-bar-track">
-        <div class="chart-bar-fill" style="width:${Math.round(d.val/max*100)}%"></div>
-      </div>
-      <span class="chart-bar-val">${d.val}</span>
-    </div>`).join('');
+    data.push({ label: d.toLocaleDateString('fr-FR', { weekday: 'narrow' }).toUpperCase(), val: state.history[key] || 0 });
+  }
+  const max = Math.max(...data.map(d => d.val), 1);
+  document.getElementById('week-chart').innerHTML = data.map(d => `
+    <div class="wk"><b>${d.val}</b><i class="${d.val?'':'zero'}" style="height:${Math.round(d.val/max*100)}px"></i><span>${d.label}</span></div>`).join('');
 }
 
 function renderHeatmap() {
@@ -425,7 +398,7 @@ function renderHeatmap() {
   }
   const maxN = Math.max(...cells.filter(Boolean).map(c=>c.n), 1);
   document.getElementById('heatmap').innerHTML = cells.map(c=>{
-    if (!c) return '<div class="heat-cell"></div>';
+    if (!c) return '<div class="heat-cell" style="visibility:hidden"></div>';
     const lvl = c.n===0?'':c.n/maxN<0.25?'h1':c.n/maxN<0.5?'h2':c.n/maxN<0.75?'h3':'h4';
     return `<div class="heat-cell ${lvl}" title="${c.d}: ${c.n} sessions"></div>`;
   }).join('');
@@ -468,12 +441,12 @@ window.addEventListener('beforeinstallprompt', e => {
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
   document.getElementById('install-banner').classList.remove('visible');
-  showToast('✅ Pomodo installé avec succès !', 3000);
+  showToast('Seed est installé', 3000);
 });
 
 function installApp() {
   if (!deferredInstallPrompt) {
-    showToast('Pour installer : Menu ⋮ → "Ajouter à l\'écran d\'accueil"', 4000);
+    showToast('Pour installer : menu du navigateur, puis Ajouter à l\'écran d\'accueil', 4000);
     dismissInstall(); return;
   }
   deferredInstallPrompt.prompt();
@@ -497,7 +470,7 @@ function updateOnlineStatus() {
   const msg = document.getElementById('toast-msg');
   if (!online) {
     dot.classList.remove('online');
-    msg.textContent = 'Hors ligne — données sauvegardées localement';
+    msg.textContent = 'Hors ligne, données sauvegardées';
     toast.classList.add('visible');
   } else {
     dot.classList.add('online');
@@ -520,7 +493,7 @@ function showToast(text, duration = 2500) {
 }
 
 function showUpdateToast() {
-  showToast('🆕 Mise à jour disponible — rechargez la page', 6000);
+  showToast('Mise à jour disponible. Rechargez la page.', 6000);
 }
 
 function checkNotifPermission() {
@@ -538,7 +511,7 @@ function requestNotifPermission() {
   Notification.requestPermission().then(perm => {
     document.getElementById('notif-prompt').classList.add('hidden');
     if (perm === 'granted') {
-      showToast('🔔 Notifications activées !');
+      showToast('Notifications activées');
     }
   });
 }
@@ -548,8 +521,8 @@ function sendNotification(title, body) {
   try {
     new Notification(title, {
       body,
-      icon: './icons/icon-192x192.png',
-      badge: './icons/icon-72x72.png',
+      icon: './assets/icon-192.png',
+      badge: './assets/icon-192.png',
       vibrate: [200, 100, 200],
       silent: false
     });
@@ -558,8 +531,8 @@ function sendNotification(title, body) {
       navigator.serviceWorker.ready.then(reg => {
         reg.showNotification(title, {
           body,
-          icon: './icons/icon-192x192.png',
-          badge: './icons/icon-72x72.png',
+          icon: './assets/icon-192.png',
+          badge: './assets/icon-192.png',
           vibrate: [200, 100, 200]
         });
       });
@@ -602,13 +575,13 @@ function handleSessionEnd() {
     renderStreakDots();
     renderSessionCount();
     if (state.timer.sound) playBeep();
-    sendNotification('🍅 Session terminée !', `Bravo ! Prends une pause bien méritée. ${state.timer.sessions} session(s) aujourd'hui.`);
+    sendNotification('Session terminée', `Prenez une vraie pause. ${state.timer.sessions} session(s) aujourd'hui.`);
     checkNotifPermission();
     const mode = state.timer.sessions % 4 === 0 ? 'long' : 'short';
     switchMode(mode, document.getElementById('tab-'+mode));
   } else {
     if (state.timer.sound) playBeep();
-    sendNotification('☕ Pause terminée !', 'Prêt pour une nouvelle session focus ?');
+    sendNotification('Pause terminée', 'Prêt pour une nouvelle session ?');
     switchMode('focus', document.getElementById('tab-focus'));
   }
   save();

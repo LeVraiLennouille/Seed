@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'seed-v1.2';
+const CACHE_VERSION = 'seed-v2.0';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -7,11 +7,11 @@ const STATIC_ASSETS = [
   './style.css',
   './script.js',
   './manifest.json',
-  './assets/icon-192x192.png',
-  './assets/icon-512x512.png',
+  './assets/icon-192.png',
+  './assets/icon-512.png',
   './assets/icon-512-maskable.png',
   './assets/apple-touch-icon.png',
-  'https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap'
+  'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Young+Serif&display=swap'
 ];
 
 self.addEventListener('install', event => {
@@ -77,11 +77,11 @@ self.addEventListener('message', event => {
 
 self.addEventListener('push', event => {
   const data = event.data ? event.data.json() : {};
-  const title = data.title || 'Pomodo';
+  const title = data.title || 'Seed';
   const options = {
     body: data.body || 'Ta session est terminée !',
-    icon: './icons/icon-192x192.png',
-    badge: './icons/icon-72x72.png',
+    icon: './assets/icon-192.png',
+    badge: './assets/icon-192.png',
     vibrate: [200, 100, 200],
     data: { url: data.url || './' },
     actions: [

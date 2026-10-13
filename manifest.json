@@ -5,8 +5,8 @@
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#F5F5F7",
-  "theme_color": "#E5534B",
+  "background_color": "#E4EADD",
+  "theme_color": "#2F6B4F",
   "orientation": "portrait-primary",
   "lang": "fr",
   "categories": ["productivity", "utilities"],
@@ -42,14 +42,14 @@
       "short_name": "Timer",
       "description": "Ouvre directement le timer Pomodoro",
       "url": "./index.html#timer",
-      "icons": [{ "src": "icons/icon-96x96.png", "sizes": "96x96" }]
+      "icons": [{ "src": "assets/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Mes tâches",
       "short_name": "Tâches",
       "description": "Ouvre la liste des tâches",
       "url": "./index.html#tasks",
-      "icons": [{ "src": "icons/icon-96x96.png", "sizes": "96x96" }]
+      "icons": [{ "src": "assets/icon-192.png", "sizes": "192x192" }]
     }
   ],
   "screenshots": [],

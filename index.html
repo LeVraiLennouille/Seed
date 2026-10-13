@@ -2,408 +2,183 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<meta name="theme-color" content="#E5534B"/>
-<meta name="description" content="Timer Pomodoro avec gestion des tâches, streaks et rapports"/>
-
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="theme-color" content="#2F6B4F"/>
+<meta name="description" content="Timer Pomodoro avec gestion des tâches, séries et rapports"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
-<meta name="apple-mobile-web-app-title" content="Pomodo"/>
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png"/>
-<link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152x152.png"/>
-<link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192x192.png"/>
-
+<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-
+<meta name="apple-mobile-web-app-title" content="Seed"/>
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png"/>
 <link rel="manifest" href="manifest.json"/>
-<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png"/>
-<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png"/>
-
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png"/>
 <title>Seed</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
-<link href="style.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Young+Serif&display=swap" rel="stylesheet"/>
+<link href="style.css" rel="stylesheet"/>
 </head>
 <body>
-<div id="app">
-<div id="onboarding" class="screen">
-  <div class="ob-header">
-    <button class="btn-skip" onclick="finishOnboarding()">Passer</button>
-  </div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z" fill="currentColor"/></symbol>
+  <symbol id="i-skip" viewBox="0 0 24 24"><path d="M5 5l10 7-10 7zM18 5v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 4v6h6M4.5 14a8 8 0 1 0 1.9-8.4L4 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 9.5V13l2.5 1.5M9.5 3h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-tasks" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3.5 6l1.3 1.3L7 5M3.5 12l1.3 1.3L7 11M3.5 18l1.3 1.3L7 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 20V12M12 20V5M19 20v-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+</svg>
+
+<div id="app" data-mode="focus">
+
+<section id="onboarding" class="screen ob">
+  <div class="ob-top"><span class="brand">Seed</span><button class="link" onclick="finishOnboarding()">Passer</button></div>
   <div class="ob-slides" id="ob-slides">
     <div class="ob-slide" id="slide-0" style="transform:translateX(0)">
-      <svg class="ob-mascot" viewBox="0 0 140 140" fill="none">
-        <circle cx="70" cy="70" r="65" fill="#FEF3C7"/>
-        <ellipse cx="70" cy="88" rx="30" ry="24" fill="#DDD6FE"/>
-        <circle cx="70" cy="58" r="28" fill="#DDD6FE"/>
-        <circle cx="58" cy="54" r="11" fill="white"/>
-        <circle cx="82" cy="54" r="11" fill="white"/>
-        <circle cx="58" cy="55" r="6" fill="#2D1B69"/>
-        <circle cx="82" cy="55" r="6" fill="#2D1B69"/>
-        <circle cx="60" cy="53" r="2" fill="white"/>
-        <circle cx="84" cy="53" r="2" fill="white"/>
-        <ellipse cx="70" cy="67" rx="5" ry="4" fill="#C4B5FD"/>
-        <path d="M64 72 Q70 77 76 72" stroke="#9F7AEA" stroke-width="2" stroke-linecap="round" fill="none"/>
-        <path d="M42 42 L48 54 L36 54 Z" fill="#C4B5FD"/>
-        <path d="M98 42 L92 54 L104 54 Z" fill="#C4B5FD"/>
-        <circle cx="55" cy="58" r="1.5" fill="#9F7AEA"/>
-        <circle cx="85" cy="58" r="1.5" fill="#9F7AEA"/>
-      </svg>
-      <div class="ob-title">Bienvenue sur Seed</div>
-      <div class="ob-subtitle" style="color:var(--red);font-weight:800;font-size:16px;">Focus better, achieve more</div>
-      <p style="font-size:14px;color:var(--muted);text-align:center;line-height:1.6;margin-bottom:28px;">Ton assistant Pomodoro personnalisé.<br>Mets en place ton expérience en quelques étapes.</p>
-      <div class="ob-features">
-        <div class="ob-feature">
-          <div class="ob-feat-icon" style="background:#FEE2E2;">🎯</div>
-          <div><div class="ob-feat-text">Suis tes sessions focus</div><div class="ob-feat-sub">Chrono précis, aucune distraction</div></div>
-        </div>
-        <div class="ob-feature">
-          <div class="ob-feat-icon" style="background:#D1FAE5;">✅</div>
-          <div><div class="ob-feat-text">Construis des habitudes productives</div><div class="ob-feat-sub">Streaks quotidiens qui motivent</div></div>
-        </div>
-        <div class="ob-feature">
-          <div class="ob-feat-icon" style="background:#EDE9FE;">📊</div>
-          <div><div class="ob-feat-text">Atteins tes objectifs</div><div class="ob-feat-sub">Statistiques et rapports détaillés</div></div>
-        </div>
-      </div>
+      <svg class="ob-art" viewBox="0 0 200 150" aria-hidden="true"><path d="M20 128h160" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><ellipse cx="100" cy="124" rx="10" ry="6.5" fill="var(--moss)"/></svg>
+      <h1>Une graine, vingt-cinq minutes.</h1>
+      <p class="lead">Seed chronomètre vos sessions de concentration. Chaque session fait pousser une plante.</p>
+      <ul class="plain"><li>Un chrono simple, sans distraction</li><li>Une série qui compte les jours consécutifs</li><li>Des rapports pour voir où va votre temps</li></ul>
     </div>
     <div class="ob-slide" id="slide-1" style="transform:translateX(100%)">
-      <svg class="ob-mascot" viewBox="0 0 140 140" fill="none">
-        <circle cx="70" cy="70" r="65" fill="#FEE2E2"/>
-        <circle cx="70" cy="70" r="44" stroke="#E5534B" stroke-width="8" fill="none" stroke-dasharray="276" stroke-dashoffset="69" stroke-linecap="round" transform="rotate(-90 70 70)"/>
-        <text x="70" y="66" text-anchor="middle" fill="#1A1A1A" font-family="Nunito" font-weight="900" font-size="18">25:00</text>
-        <text x="70" y="82" text-anchor="middle" fill="#E5534B" font-family="Nunito" font-weight="700" font-size="9" letter-spacing="1">FOCUS</text>
-      </svg>
-      <div class="ob-title">Timer Pomodoro</div>
-      <div class="ob-subtitle">Séances de 25 min + pauses intelligentes pour un focus optimal</div>
-      <div class="ob-features">
-        <div class="ob-feature">
-          <div class="ob-feat-icon" style="background:#FEE2E2;">⏱️</div>
-          <div><div class="ob-feat-text">Compte à rebours circulaire</div><div class="ob-feat-sub">Focus 25 min · Pause 5 min · Longue 15 min</div></div>
-        </div>
-        <div class="ob-feature">
-          <div class="ob-feat-icon" style="background:#FEF3C7;">🔥</div>
-          <div><div class="ob-feat-text">Streak quotidien</div><div class="ob-feat-sub">Maintiens ta flamme chaque jour</div></div>
-        </div>
-        <div class="ob-feature">
-          <div class="ob-feat-icon" style="background:#DCFCE7;">🔔</div>
-          <div><div class="ob-feat-text">Notifications intelligentes</div><div class="ob-feat-sub">Alertes de fin de session discrètes</div></div>
-        </div>
-      </div>
+      <svg class="ob-art" viewBox="0 0 200 150" aria-hidden="true"><path d="M20 128h160" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M100 124C100 108 94 92 100 70" fill="none" stroke="var(--moss)" stroke-width="4" stroke-linecap="round"/><path d="M98 100C82 100 72 90 70 78C86 78 97 85 98 100Z" fill="var(--moss)"/><path d="M101 84C116 84 126 75 128 64C113 64 102 70 101 84Z" fill="var(--sprout)"/></svg>
+      <h1>Concentrez-vous, puis reposez-vous.</h1>
+      <p class="lead">Trois rythmes à régler selon vos habitudes.</p>
+      <ul class="plain"><li>Concentration de 25 minutes</li><li>Pause courte de 5 minutes</li><li>Pause longue de 15 minutes toutes les quatre sessions</li></ul>
     </div>
     <div class="ob-slide" id="slide-2" style="transform:translateX(200%)">
-      <svg class="ob-mascot" viewBox="0 0 140 140" fill="none">
-        <circle cx="70" cy="70" r="65" fill="#F0FDF4"/>
-        <rect x="28" y="40" width="84" height="70" rx="8" fill="white" stroke="#E5E7EB" stroke-width="1"/>
-        <rect x="35" y="55" width="4" height="32" rx="2" fill="#E5534B"/>
-        <text x="46" y="62" fill="#1A1A1A" font-family="Nunito" font-weight="700" font-size="8.5">Projet Alpha</text>
-        <rect x="44" y="66" width="50" height="3" rx="1.5" fill="#E5E7EB"/>
-        <rect x="44" y="66" width="35" height="3" rx="1.5" fill="#22C55E"/>
-        <rect x="35" y="76" width="4" height="20" rx="2" fill="#3B82F6"/>
-        <text x="46" y="82" fill="#1A1A1A" font-family="Nunito" font-weight="700" font-size="8.5">Design System</text>
-        <rect x="44" y="86" width="50" height="3" rx="1.5" fill="#E5E7EB"/>
-        <rect x="44" y="86" width="20" height="3" rx="1.5" fill="#3B82F6"/>
-        <rect x="35" y="96" width="4" height="8" rx="2" fill="#F59E0B"/>
-        <text x="46" y="102" fill="#1A1A1A" font-family="Nunito" font-weight="700" font-size="8.5">Documentation</text>
-        <circle cx="100" cy="45" r="12" fill="#22C55E"/>
-        <path d="M94 45 L98 49 L106 41" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <div class="ob-title">Gère tes tâches</div>
-      <div class="ob-subtitle">Organise, priorise et suis tes projets avec des sous-tâches et tags colorés</div>
-      <div class="ob-features">
-        <div class="ob-feature">
-          <div class="ob-feat-icon" style="background:#EFF6FF;">🏷️</div>
-          <div><div class="ob-feat-text">Tags & catégories colorées</div><div class="ob-feat-sub">Retrouve rapidement chaque tâche</div></div>
-        </div>
-        <div class="ob-feature">
-          <div class="ob-feat-icon" style="background:#FEF3C7;">📈</div>
-          <div><div class="ob-feat-text">Barre de progression</div><div class="ob-feat-sub">Visualise l'avancement des sous-tâches</div></div>
-        </div>
-      </div>
+      <svg class="ob-art" viewBox="0 0 200 150" aria-hidden="true"><path d="M20 128h160" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M100 124C100 100 90 80 100 40" fill="none" stroke="var(--moss)" stroke-width="4" stroke-linecap="round"/><path d="M98 104C80 104 68 94 66 80C84 80 96 88 98 104Z" fill="var(--moss)"/><path d="M101 86C120 86 132 76 134 62C116 62 103 70 101 86Z" fill="var(--sprout)"/><path d="M99 66C84 64 76 55 74 44C88 44 98 52 99 66Z" fill="var(--moss)"/><circle cx="100" cy="36" r="9" fill="var(--sprout)"/></svg>
+      <h1>Une tâche à la fois.</h1>
+      <p class="lead">Classez vos tâches par catégorie et couleur, puis cochez-les au fil de la journée.</p>
+      <ul class="plain"><li>Catégories et couleurs au choix</li><li>Progression des sous-tâches</li></ul>
     </div>
   </div>
-  <div class="ob-dots" id="ob-dots">
-    <div class="ob-dot active" id="dot-0"></div>
-    <div class="ob-dot" id="dot-1"></div>
-    <div class="ob-dot" id="dot-2"></div>
+  <div class="ob-bottom">
+    <div class="dots" id="ob-dots"><i class="active" id="dot-0"></i><i id="dot-1"></i><i id="dot-2"></i></div>
+    <button class="btn" id="ob-btn" onclick="nextSlide()">Continuer</button>
   </div>
-  <div class="ob-footer">
-    <button class="btn-primary" id="ob-btn" onclick="nextSlide()">
-      Continuer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-    </button>
+</section>
+
+<section id="timer" class="screen hidden">
+  <header class="top">
+    <span class="brand">Seed</span>
+    <button class="icon-btn" onclick="showScreen('settings')" aria-label="Paramètres"><svg><use href="#i-gear"/></svg></button>
+  </header>
+  <div class="modes" role="tablist">
+    <button class="tab-btn active" id="tab-focus" onclick="switchMode('focus',this)">Concentration</button>
+    <button class="tab-btn" id="tab-short" onclick="switchMode('short',this)">Pause courte</button>
+    <button class="tab-btn" id="tab-long" onclick="switchMode('long',this)">Pause longue</button>
   </div>
-</div>
-<div id="timer" class="screen hidden">
-  <div class="timer-header">
-    <div class="timer-brand">
-      <div class="brand-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>
-      </div>
-      <span class="brand-name">Seed</span>
-    </div>
-    <div style="display:flex;gap:8px;">
-      <button class="icon-btn" onclick="showScreen('settings')" title="Paramètres">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      </button>
-    </div>
+  <div id="notif-prompt" class="notice hidden">
+    <div><strong>Activer les notifications</strong><span>Une alerte à la fin de chaque session.</span></div>
+    <button class="btn sm" onclick="requestNotifPermission()">Activer</button>
+    <button class="icon-btn flat" onclick="document.getElementById('notif-prompt').classList.add('hidden')" aria-label="Fermer">&times;</button>
   </div>
-  <div class="session-tabs">
-    <button class="tab-btn active" id="tab-focus" onclick="switchMode('focus',this)">🍅 Focus</button>
-    <button class="tab-btn" id="tab-short" onclick="switchMode('short',this)">☕ Pause courte</button>
-    <button class="tab-btn" id="tab-long" onclick="switchMode('long',this)">🌿 Pause longue</button>
-  </div>
-  <div id="notif-prompt" class="hidden">
-    <div style="font-size:22px;">🔔</div>
-    <div class="notif-text">
-      <div class="notif-title">Activer les notifications</div>
-      <div class="notif-sub">Reçois une alerte à la fin de chaque session</div>
-    </div>
-    <button class="btn-notif" onclick="requestNotifPermission()">Activer</button>
-    <button class="btn-notif-close" onclick="document.getElementById('notif-prompt').classList.add('hidden')">×</button>
-  </div>
-  <div style="flex:1;overflow-y:auto;padding-bottom:20px;">
-    <div class="timer-card">
-      <div class="timer-ring-wrap">
-        <svg id="timer-svg" viewBox="0 0 240 240">
-          <circle class="timer-ring-bg" cx="120" cy="120" r="104"/>
-          <circle id="timer-ring" cx="120" cy="120" r="104" style="stroke-dasharray:653.1;stroke-dashoffset:0;"/>
-        </svg>
-        <div class="timer-center">
-          <div class="timer-label" id="timer-mode-label">FOCUS TIME</div>
-          <div class="timer-display" id="timer-display">25:00</div>
-          <div class="timer-session" id="session-count">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-            <span>0 session complétée</span>
-          </div>
-        </div>
-      </div>
-      <div class="timer-controls">
-        <button class="ctrl-btn" onclick="skipTimer()" title="Passer">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
-        </button>
-        <button class="ctrl-btn play" id="play-btn" onclick="toggleTimer()">
-          <svg id="play-icon" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        </button>
-        <button class="ctrl-btn" onclick="resetTimer()" title="Réinitialiser">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
-        </button>
-      </div>
-      <div class="streak-row">
-        <span class="streak-label">🔥 Séances aujourd'hui</span>
-        <div class="streak-dots" id="streak-dots"></div>
-      </div>
-    </div>
-    <div class="section-header" style="margin-top:8px;">
-      <span class="section-title">📋 Tâches du jour</span>
-      <button class="btn-link" onclick="showScreen('tasks')">Voir tout</button>
-    </div>
-    <div id="timer-tasks"></div>
-    <div id="empty-tasks" style="text-align:center;padding:20px;display:none;">
-      <div style="font-size:32px;margin-bottom:8px;">🎯</div>
-      <div style="font-size:14px;color:var(--muted);font-weight:600;">Aucune tâche active</div>
-      <button class="btn-link" style="margin-top:8px;" onclick="showScreen('tasks')">Ajouter une tâche</button>
+  <div class="stage">
+    <svg id="plant" viewBox="0 0 200 180" aria-hidden="true">
+      <path class="ground" d="M24 158h152"/>
+      <ellipse class="seed" cx="100" cy="154" rx="9" ry="6"/>
+      <path id="stem" pathLength="1" d="M100 152C100 126 90 98 100 46"/>
+      <path id="leaf1" class="leaf l" d="M98 116C78 116 66 104 64 90C82 90 96 98 98 116Z"/>
+      <path id="leaf2" class="leaf r" d="M101 94C122 94 134 82 136 68C118 68 103 76 101 94Z"/>
+      <path id="leaf3" class="leaf l" d="M99 72C82 70 72 60 70 48C86 48 98 56 99 72Z"/>
+      <circle id="bud" class="leaf b" cx="100" cy="38" r="10"/>
+    </svg>
+    <div class="digits" id="timer-display" role="timer" aria-label="25 minutes 00 seconde">25:00</div>
+    <div class="state"><span id="timer-mode-label">Concentration</span><span id="session-count">0 session aujourd'hui</span></div>
+    <div class="controls">
+      <button class="ghost" onclick="resetTimer()" aria-label="Réinitialiser"><svg><use href="#i-reset"/></svg></button>
+      <button class="go" id="play-btn" onclick="toggleTimer()"><svg id="play-icon"><use href="#i-play"/></svg><span id="play-label">Démarrer</span></button>
+      <button class="ghost" onclick="skipTimer()" aria-label="Passer à la phase suivante"><svg><use href="#i-skip"/></svg></button>
     </div>
   </div>
-</div>
-<div id="tasks" class="screen hidden">
-  <div class="navbar">
-    <span class="nav-title">📋 Tâches</span>
-    <button class="icon-btn" onclick="openAddTask()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    </button>
+  <div class="pods-row"><span>Aujourd'hui</span><div class="pods" id="streak-dots"></div></div>
+  <div class="sec-h"><h2>Tâches en cours</h2><button class="link" onclick="showScreen('tasks')">Tout voir</button></div>
+  <div id="timer-tasks" class="rows"></div>
+  <div id="empty-tasks" class="empty" style="display:none"><p>Aucune tâche en cours.</p><button class="link" onclick="showScreen('tasks')">Ajouter une tâche</button></div>
+</section>
+
+<section id="tasks" class="screen hidden">
+  <header class="top"><h1 class="title">Tâches</h1><button class="icon-btn" onclick="openAddTask()" aria-label="Nouvelle tâche"><svg><use href="#i-plus"/></svg></button></header>
+  <div class="tabs2">
+    <button class="tasks-tab active" id="ttab-active" onclick="switchTaskTab('active')">En cours <b id="active-count">0</b></button>
+    <button class="tasks-tab" id="ttab-done" onclick="switchTaskTab('done')">Terminées <b id="done-count">0</b></button>
   </div>
-  <div class="tasks-tabs">
-    <button class="tasks-tab active" id="ttab-active" onclick="switchTaskTab('active')">Actives <span class="badge" id="active-count">0</span></button>
-    <button class="tasks-tab" id="ttab-done" onclick="switchTaskTab('done')">Terminées <span class="badge" id="done-count">0</span></button>
+  <div id="tasks-list" class="rows"></div>
+  <button class="fab" onclick="openAddTask()"><svg><use href="#i-plus"/></svg>Nouvelle tâche</button>
+</section>
+
+<section id="reports" class="screen hidden">
+  <header class="top"><h1 class="title">Rapports</h1></header>
+  <div class="stats">
+    <div><b id="total-sessions">0</b><span>sessions</span></div>
+    <div><b id="total-minutes">0</b><span>minutes de concentration</span></div>
+    <div><b id="streak-days">0</b><span>jours d'affilée</span></div>
+    <div><b id="tasks-done">0</b><span>tâches terminées</span></div>
   </div>
-  <div style="flex:1;overflow-y:auto;padding-top:8px;padding-bottom:80px;">
-    <div id="tasks-list"></div>
+  <div class="block"><h2>Les 7 derniers jours</h2><div class="week" id="week-chart"></div></div>
+  <div class="block"><h2>Ce mois-ci</h2>
+    <div class="heat-labels"><i>L</i><i>M</i><i>M</i><i>J</i><i>V</i><i>S</i><i>D</i></div>
+    <div class="heatmap-grid" id="heatmap"></div>
   </div>
-  <button class="fab" onclick="openAddTask()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-  </button>
-</div>
-<div id="reports" class="screen hidden">
-  <div class="navbar">
-    <span class="nav-title">📊 Rapports</span>
+</section>
+
+<section id="settings" class="screen hidden">
+  <header class="top"><button class="icon-btn" onclick="goBack()" aria-label="Retour"><svg><use href="#i-back"/></svg></button><h1 class="title">Paramètres</h1><span style="width:44px"></span></header>
+  <div class="profile">
+    <div class="avatar"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="14" rx="5" ry="3.5" fill="currentColor"/><path d="M12 12V6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+    <div><strong id="profile-name">Votre jardin</strong>
+      <div class="pstats"><span><b id="prof-tasks">0</b> tâches</span><span><b id="prof-sessions">0</b> sessions</span><span><b id="prof-mins">0</b> min</span></div></div>
   </div>
-  <div style="overflow-y:auto;padding-bottom:20px;">
-    <div class="stat-grid">
-      <div class="stat-card"><div class="stat-num" id="total-sessions">0</div><div class="stat-label">Sessions totales</div></div>
-      <div class="stat-card"><div class="stat-num" id="total-minutes">0</div><div class="stat-label">Minutes focus</div></div>
-      <div class="stat-card"><div class="stat-num" id="streak-days">0</div><div class="stat-label">🔥 Streak (jours)</div></div>
-      <div class="stat-card"><div class="stat-num" id="tasks-done">0</div><div class="stat-label">Tâches terminées</div></div>
-    </div>
-    <div style="margin:0 16px 16px;background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);">
-      <div style="font-size:14px;font-weight:800;margin-bottom:12px;">Activité — 7 derniers jours</div>
-      <div class="chart-bar-wrap" id="week-chart"></div>
-    </div>
-    <div style="margin:0 16px;background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);">
-      <div style="font-size:14px;font-weight:800;margin-bottom:12px;">Calendrier du mois</div>
-      <div class="heat-day-labels">
-        <div class="heat-day">L</div><div class="heat-day">M</div><div class="heat-day">M</div>
-        <div class="heat-day">J</div><div class="heat-day">V</div><div class="heat-day">S</div><div class="heat-day">D</div>
-      </div>
-      <div class="heatmap-grid" id="heatmap"></div>
-    </div>
+  <h2 class="group">Durées, en minutes</h2>
+  <div class="set">
+    <div class="set-row col"><span>Concentration</span><div class="chips" id="chips-focus"></div></div>
+    <div class="set-row col"><span>Pause courte</span><div class="chips" id="chips-short"></div></div>
+    <div class="set-row col"><span>Pause longue</span><div class="chips" id="chips-long"></div></div>
   </div>
-</div>
-<div id="settings" class="screen hidden">
-  <div class="navbar">
-    <button class="icon-btn" onclick="goBack()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
-    <span class="nav-title">Paramètres</span>
-    <div style="width:40px;"></div>
+  <h2 class="group">Préférences</h2>
+  <div class="set">
+    <div class="set-row"><div><strong>Mode sombre</strong><small>Palette de nuit</small></div>
+      <label class="tog"><input type="checkbox" id="dark-toggle" onchange="toggleDarkMode(this)"/><i></i></label></div>
+    <div class="set-row"><div><strong>Objectif quotidien</strong><small>Sessions visées par jour</small></div>
+      <div class="stepper"><button onclick="adjGoal(-1)" aria-label="Moins">&minus;</button><span id="goal-val">8</span><button onclick="adjGoal(1)" aria-label="Plus">+</button></div></div>
+    <div class="set-row"><div><strong>Son de fin de session</strong><small>Un bip court</small></div>
+      <label class="tog"><input type="checkbox" id="sound-toggle" checked onchange="saveSetting('sound',this.checked)"/><i></i></label></div>
+    <div class="set-row"><div><strong>Écran allumé</strong><small>Empêche la mise en veille</small></div>
+      <label class="tog"><input type="checkbox" id="wake-toggle" onchange="toggleWakeLock(this)"/><i></i></label></div>
   </div>
-  <div style="overflow-y:auto;padding-bottom:20px;">
-    <div class="settings-profile">
-      <div class="avatar">🦉</div>
-      <div>
-        <div class="profile-name" id="profile-name">Utilisateur</div>
-        <div class="profile-stats">
-          <div class="pstat"><span id="prof-tasks">0</span> tâches</div>
-          <div class="pstat"><span id="prof-sessions">0</span> sessions</div>
-          <div class="pstat"><span id="prof-mins">0</span> min</div>
-        </div>
-      </div>
-    </div>
-    <div class="settings-section">
-      <div class="settings-label">⏱ Durées du timer</div>
-      <div class="settings-card">
-        <div class="preset-row">
-          <div class="preset-header">
-            <span style="font-size:17px;">🍅</span>
-            <span class="preset-name">Focus</span>
-          </div>
-          <div class="preset-chips" id="chips-focus"></div>
-        </div>
-        <div class="preset-row">
-          <div class="preset-header">
-            <span style="font-size:17px;">☕</span>
-            <span class="preset-name">Pause courte</span>
-          </div>
-          <div class="preset-chips" id="chips-short"></div>
-        </div>
-        <div class="preset-row">
-          <div class="preset-header">
-            <span style="font-size:17px;">🌿</span>
-            <span class="preset-name">Pause longue</span>
-          </div>
-          <div class="preset-chips" id="chips-long"></div>
-        </div>
-      </div>
-    </div>
-    <div class="settings-section">
-      <div class="settings-label">⚙️ Préférences</div>
-      <div class="settings-card">
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-icon" style="background:#1C1C1E;color:#fff;">🌙</div>
-            <div>
-              <div class="setting-name">Mode sombre</div>
-              <div class="setting-sub">Thème nuit pour les yeux</div>
-            </div>
-          </div>
-          <label class="toggle">
-            <input type="checkbox" id="dark-toggle" onchange="toggleDarkMode(this)"/>
-            <div class="toggle-track"></div>
-            <div class="toggle-thumb"></div>
-          </label>
-        </div>
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-icon" style="background:#FEF3C7;color:#92400E;">🏆</div>
-            <div>
-              <div class="setting-name">Objectif quotidien</div>
-              <div class="setting-sub">Nombre de sessions visées</div>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <button onclick="adjGoal(-1)" style="width:28px;height:28px;border-radius:50%;border:2px solid var(--gray-200);background:none;font-size:16px;cursor:pointer;color:var(--text);">−</button>
-            <span id="goal-val" style="font-size:16px;font-weight:800;min-width:24px;text-align:center;">8</span>
-            <button onclick="adjGoal(1)" style="width:28px;height:28px;border-radius:50%;border:2px solid var(--gray-200);background:none;font-size:16px;cursor:pointer;color:var(--text);">+</button>
-          </div>
-        </div>
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-icon" style="background:#DCFCE7;color:#166534;">🔔</div>
-            <div>
-              <div class="setting-name">Sons de notification</div>
-              <div class="setting-sub">Bip de fin de séance</div>
-            </div>
-          </div>
-          <label class="toggle">
-            <input type="checkbox" id="sound-toggle" checked onchange="saveSetting('sound',this.checked)"/>
-            <div class="toggle-track"></div>
-            <div class="toggle-thumb"></div>
-          </label>
-        </div>
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-icon" style="background:#EFF6FF;color:#1D4ED8;">💡</div>
-            <div>
-              <div class="setting-name">Écran allumé</div>
-              <div class="setting-sub">Empêcher la mise en veille</div>
-            </div>
-          </div>
-          <label class="toggle">
-            <input type="checkbox" id="wake-toggle" onchange="toggleWakeLock(this)"/>
-            <div class="toggle-track"></div>
-            <div class="toggle-thumb"></div>
-          </label>
-        </div>
-      </div>
-    </div>
-    <div style="padding:20px 16px 0;text-align:center;">
-      <div style="font-size:12px;color:var(--muted);font-weight:600;">Pomodo v1.0 · Fait avec ❤️ et Claude</div>
-    </div>
-  </div>
-</div>
+  <p class="foot">Seed v1.2</p>
+</section>
+
 <div id="install-banner">
-  <div class="install-top">
-    <div class="install-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg></div>
-    <div class="install-text"><div class="install-title">Installer Pomodo</div><div class="install-sub">Accès rapide · Fonctionne hors-ligne</div></div>
-  </div>
-  <div class="install-actions">
-    <button class="btn-install-later" onclick="dismissInstall()">Plus tard</button>
-    <button class="btn-install" onclick="installApp()">📲 Installer</button>
-  </div>
+  <div><strong>Installer Seed</strong><span>Accès direct depuis l'écran d'accueil, même hors ligne.</span></div>
+  <div class="row-btns"><button class="btn ghost-btn" onclick="dismissInstall()">Plus tard</button><button class="btn" onclick="installApp()">Installer</button></div>
 </div>
-<div id="offline-toast"><div class="toast-dot" id="toast-dot"></div><span id="toast-msg">Hors ligne — données sauvegardées</span></div>
+<div id="offline-toast" role="status"><i class="toast-dot" id="toast-dot"></i><span id="toast-msg">Hors ligne, données sauvegardées</span></div>
+
 <div class="modal-overlay" id="add-task-modal" onclick="closeModal(event)">
-  <div class="modal-sheet">
-    <div class="modal-handle"></div>
-    <div class="modal-title">Nouvelle tâche</div>
-    <div class="input-group">
-      <label class="input-label">Titre</label>
-      <input class="inp" type="text" id="task-input" placeholder="Ex: Reviser le chapitre 3..." maxlength="60"/>
-    </div>
-    <div class="input-group">
-      <label class="input-label">Catégorie</label>
-      <div class="cat-select" id="cat-select"></div>
-    </div>
-    <div class="input-group">
-      <label class="input-label">Couleur</label>
-      <div class="color-swatches" id="color-swatches"></div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-secondary" onclick="closeAddTask()">Annuler</button>
-      <button class="btn-primary" onclick="saveTask()">Ajouter</button>
-    </div>
+  <div class="sheet" role="dialog" aria-label="Nouvelle tâche">
+    <h2>Nouvelle tâche</h2>
+    <label class="input-label" for="task-input">Titre</label>
+    <input class="inp" type="text" id="task-input" placeholder="Réviser le chapitre 3" maxlength="60"/>
+    <span class="input-label">Catégorie</span>
+    <div class="cat-select" id="cat-select"></div>
+    <span class="input-label">Couleur</span>
+    <div class="color-swatches" id="color-swatches"></div>
+    <div class="row-btns"><button class="btn ghost-btn" onclick="closeAddTask()">Annuler</button><button class="btn" onclick="saveTask()">Ajouter la tâche</button></div>
   </div>
 </div>
+
 <nav class="bottom-nav" id="bottom-nav">
-  <button class="nav-item" id="nav-timer" onclick="showScreen('timer')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 6 12 12 16 14"/></svg>Timer
-  </button>
-  <button class="nav-item" id="nav-tasks" onclick="showScreen('tasks')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Tâches
-  </button>
-  <button class="nav-item" id="nav-reports" onclick="showScreen('reports')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Rapports
-  </button>
+  <button class="nav-item" id="nav-timer" onclick="showScreen('timer')"><svg><use href="#i-timer"/></svg><span>Timer</span></button>
+  <button class="nav-item" id="nav-tasks" onclick="showScreen('tasks')"><svg><use href="#i-tasks"/></svg><span>Tâches</span></button>
+  <button class="nav-item" id="nav-reports" onclick="showScreen('reports')"><svg><use href="#i-chart"/></svg><span>Rapports</span></button>
 </nav>
+</div>
 <script src="script.js"></script>
 </body>
 </html>
