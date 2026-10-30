@@ -70,6 +70,7 @@ function migrate() {
   if (!SPECIES.some(s => s.id === state.species)) state.species = 'apple';
   delete state.garden; delete t.wither;
   state.dead = state.dead || null;
+  state.wilted = state.wilted || 0;
   state.forest = state.forest || [];
   const had = state.unlocked || [];
   state.unlocked = SPECIES.filter(sp => meets(sp) || had.includes(sp.id)).map(s => s.id);
@@ -185,10 +186,15 @@ function shiftDay(key, n) {
 // Nouveau jour : remet à zéro les sessions du jour, et la série si un jour a été manqué
 function refreshDaily() {
   const t = state.timer, today = localDateKey();
-  if (t.lastDate && t.lastDate !== today) {
-    t.sessions = 0;
-    if (t.lastDate !== shiftDay(today, -1) && t.streakDays > 0) { witherPlant(); showToast('Votre plante a fané… une nouvelle graine vous attend', 5000); }
-  }
+  if (t.lastDate && t.lastDate !== today) t.sessions = 0;
+  if (!t.lastDate || t.streakDays <= 0) return;
+  let k = shiftDay(t.accounted || t.lastDate, 1), n = 0;
+  while (k < today && n < 400) { n++; k = shiftDay(k, 1); }
+  if (!n) return;
+  t.accounted = shiftDay(today, -1);
+  state.wilted += n;
+  if (state.wilted > leafCap()) { witherPlant(); showToast('Votre arbre a fané… une nouvelle graine vous attend', 5000); }
+  else showToast(n > 1 ? `${n} feuilles ont fané` : 'Une feuille a fané', 4000);
 }
 
 // --- Timer basé sur une heure de fin absolue (endTime) ---
@@ -818,37 +824,47 @@ function checkUnlocks() {
   return fresh;
 }
 
-// Un jour raté : la plante fane, la série repart de zéro
+// Nombre de feuilles fanées tolérées : plus l'arbre est ancien, plus il est résistant
+const leafCap = (d = state.timer.streakDays) => 3 + Math.floor(d / 7);
+
+// Trop de feuilles fanées : tout l'arbre fane et la série est perdue
 function witherPlant() {
   const t = state.timer;
   if (t.streakDays > 0) {
     state.dead = { days: t.streakDays, sp: state.species };
     state.forest.push({ days: t.streakDays, sp: state.species, d: localDateKey() });
   }
-  t.streakDays = 0;
+  t.streakDays = 0; t.accounted = null; state.wilted = 0;
 }
 
-function treeInner(sp, d, w) {
+function treeInner(sp, d, w, wl = 0, cap = 1) {
   d = Math.max(0, Math.min(365, d));
   const G = 158, p = Math.min(1, d / 100), ease = x => x * x * (3 - 2 * x);
   let out = '<path d="M24 158h152" style="stroke:var(--line)" stroke-width="2.5" stroke-linecap="round" fill="none"/>';
   if (d < 0.03) return out + '<ellipse cx="100" cy="154" rx="9" ry="6" style="fill:var(--moss)"/>';
-  const H = 14 + 84 * Math.pow(p, 0.65), top = G - H, W = 2.5 + 6 * p, leafC = w ? '#A89F7B' : sp.leaf;
+  const H = 14 + 84 * Math.pow(p, 0.65), top = G - H, W = 2.5 + 6 * p, ratio = Math.min(1, wl / (cap + 1));
+  const leafC = w ? '#A89F7B' : ratio ? `color-mix(in srgb,#B3A261 ${Math.round(ratio * 80)}%,${sp.leaf})` : sp.leaf;
   const bark = w ? '#8A7B55' : `color-mix(in srgb,#7A5230 ${Math.round(Math.min(1, Math.max(0, (d - 15) / 60)) * 100)}%,#3C8A55)`;
   let g = `<path d="M100 156C100 ${G - H * 0.4} 95 ${G - H * 0.7} 100 ${top}" style="stroke:${bark}" stroke-width="${W}" stroke-linecap="round" fill="none"/>`;
   if (d < 60) {
     const n = Math.min(10, 1 + Math.floor(d / 3)), s = 4 + 8 * Math.min(1, d / 40);
     for (let i = 0; i < n; i++) {
       const y = top + (H * 0.9 * (i + 1)) / (n + 1), k = i % 2 ? 1 : -1, x = 100 + k * 2;
-      g += `<ellipse cx="${x + k * s}" cy="${y}" rx="${s * 1.1}" ry="${s * 0.5}" fill="${leafC}" transform="rotate(${-k * 28} ${x} ${y})"/>`;
+      const dry = !w && i >= n - wl;
+      g += `<ellipse cx="${x + k * s}" cy="${y}" rx="${s * 1.1}" ry="${s * 0.5}" style="fill:${dry ? '#B3A261' : leafC}" transform="rotate(${dry ? k * 40 : -k * 28} ${x} ${y})"/>`;
     }
-    g += `<ellipse cx="100" cy="${top - s * 0.5}" rx="${s * 0.5}" ry="${s}" fill="${leafC}"/>`;
+    g += `<ellipse cx="100" cy="${top - s * 0.5}" rx="${s * 0.5}" ry="${s}" style="fill:${leafC}"/>`;
   }
   if (d >= 25) {
     const R = 8 + 40 * ease(Math.min(1, (d - 25) / 140)), cy = top - R * 0.25;
     [[0, 0, 1], [-.62, .28, .72], [.62, .28, .72], [-.34, -.5, .7], [.4, -.55, .66]].forEach(([x, y, k], i) => {
-      g += `<circle cx="${100 + x * R}" cy="${cy + y * R}" r="${R * k}" fill="${leafC}" opacity="${i ? 0.93 : 1}"/>`;
+      g += `<circle cx="${100 + x * R}" cy="${cy + y * R}" r="${R * k}" style="fill:${leafC}" opacity="${i ? 0.93 : 1}"/>`;
     });
+    [[.3, -.6], [-.55, .2], [.6, .25], [0, .45], [-.2, -.3], [.45, -.1], [-.65, -.35], [.15, .1], [.7, .5], [-.4, .5]]
+      .slice(0, w ? 0 : Math.min(10, wl)).forEach(([fx, fy], i) => {
+        const x = 100 + fx * R, y = cy + fy * R;
+        g += `<ellipse cx="${x}" cy="${y}" rx="4.5" ry="2.2" fill="#B3A261" transform="rotate(${i * 37} ${x} ${y})"/>`;
+      });
     if (!w) {
       const POS = [[-.5, -.1], [.1, -.45], [.55, 0], [-.15, .3], [.35, .4], [-.6, .4], [0, -.1], [.7, -.35], [-.35, -.55], [.25, .1]];
       const nb = d >= 200 ? Math.min(10, Math.ceil((d - 200) / 10)) : 0, nf = d > 300 ? Math.min(10, Math.ceil((d - 300) / 6.5)) : 0;
@@ -860,15 +876,17 @@ function treeInner(sp, d, w) {
     }
   }
   out += w ? `<g transform="rotate(9 100 158)">${g}</g><ellipse cx="68" cy="156" rx="6" ry="2.5" fill="#A89F7B"/><ellipse cx="134" cy="156" rx="5" ry="2" fill="#A89F7B"/>` : g;
+  if (!w) [[70, 156], [132, 157], [84, 157], [118, 156], [58, 157], [146, 156], [96, 158], [108, 158]]
+    .slice(0, Math.min(8, wl)).forEach(([x, y]) => { out += `<ellipse cx="${x}" cy="${y}" rx="5" ry="2" fill="#B3A261"/>`; });
   return out;
 }
-const treeSVG = (sp, d, w) => `<svg viewBox="0 0 200 180" aria-hidden="true">${treeInner(sp, d, w)}</svg>`;
+const treeSVG = (sp, d, w, wl, cap) => `<svg viewBox="0 0 200 180" aria-hidden="true">${treeInner(sp, d, w, wl, cap)}</svg>`;
 
 // Sur l'écran du timer : la plante du jour grandit pendant la session de concentration
 function renderPlant(p) {
   const t = state.timer, grow = t.mode === 'focus' && t.lastDate !== localDateKey() ? p : 0;
   const el = document.getElementById('plant'), sp = speciesOf(state.species);
-  el.innerHTML = state.dead && !(grow > 0) ? treeInner(sp, state.dead.days, true) : treeInner(sp, t.streakDays + grow, false);
+  el.innerHTML = state.dead && !(grow > 0) ? treeInner(sp, state.dead.days, true) : treeInner(sp, t.streakDays + grow, false, state.wilted, leafCap());
 }
 
 function setSpecies(id) { state.species = id; save(); updateTimerDisplay(); renderGarden(); }
@@ -877,10 +895,11 @@ function renderGarden() {
   const d = state.dead ? state.dead.days : state.timer.streakDays, wilt = !!state.dead, sp = speciesOf(state.species);
   const i = STAGES.reduce((a, [n], k) => d >= n ? k : a, 0), nxt = STAGES[i + 1], left = nxt ? nxt[0] - d : 0;
   document.getElementById('garden-title').textContent = state.name;
-  document.getElementById('garden-plant').innerHTML = treeSVG(sp, d, wilt);
+  const wl = state.wilted, cap = leafCap(), pl = n => n > 1 ? 's' : '';
+  document.getElementById('garden-plant').innerHTML = treeSVG(sp, d, wilt, state.wilted, leafCap());
   document.getElementById('garden-stage').innerHTML = wilt
     ? `<b>Plante fanée</b>Elle avait atteint le stade « ${STAGES[i][1]} ». Terminez une session pour planter une nouvelle graine.`
-    : `<b>${STAGES[i][1]}</b>${nxt ? `Prochaine étape dans ${left} jour${left > 1 ? 's' : ''}, sans manquer un seul jour.` : 'Forme finale atteinte. Continuez pour la garder en vie.'}`;
+    : `<b>${STAGES[i][1]}</b>${nxt ? `Prochaine étape dans ${left} jour${pl(left)}.` : 'Forme finale atteinte.'}<br>${wl ? (cap - wl > 0 ? `${wl} feuille${pl(wl)} fanée${pl(wl)}. L'arbre peut en perdre ${cap - wl} de plus.` : `${wl} feuilles fanées. Une de plus et l'arbre fane.`) : 'Toutes les feuilles sont en bonne santé.'}`;
   document.getElementById('species-list').innerHTML = SPECIES.map(s => {
     const ok = state.unlocked.includes(s.id), cur = s.id === state.species;
     const need = s.need ? `Série de ${s.need[1]} jours` : 'Disponible dès le départ';
@@ -931,11 +950,14 @@ function handleSessionEnd(at = Date.now()) {
     t.totalMinutes += t.durations.focus;
     state.history[day] = (state.history[day] || 0) + 1;
     if (day === localDateKey()) t.sessions++;
+    refreshDaily();
     const grew = t.lastDate !== day;
     if (grew) {
-      if (t.lastDate === shiftDay(day, -1)) t.streakDays++;
-      else { witherPlant(); t.streakDays = 1; state.dead = null; }
+      if (t.streakDays === 0) { state.dead = null; state.wilted = 0; }
+      t.streakDays++;
       t.lastDate = day;
+      if (t.accounted && day <= t.accounted) state.wilted = Math.max(0, state.wilted - 1);
+      else t.accounted = day;
     }
     t.bestStreak = Math.max(t.bestStreak || 0, t.streakDays);
     const fresh = checkUnlocks();
