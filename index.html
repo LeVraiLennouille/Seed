@@ -81,15 +81,7 @@
     <button class="icon-btn flat" onclick="document.getElementById('notif-prompt').classList.add('hidden')" aria-label="Fermer">&times;</button>
   </div>
   <div class="stage">
-    <svg id="plant" viewBox="0 0 200 180" aria-hidden="true">
-      <path class="ground" d="M24 158h152"/>
-      <ellipse class="seed" cx="100" cy="154" rx="9" ry="6"/>
-      <path id="stem" pathLength="1" d="M100 152C100 126 90 98 100 46"/>
-      <path id="leaf1" class="leaf l" d="M98 116C78 116 66 104 64 90C82 90 96 98 98 116Z"/>
-      <path id="leaf2" class="leaf r" d="M101 94C122 94 134 82 136 68C118 68 103 76 101 94Z"/>
-      <path id="leaf3" class="leaf l" d="M99 72C82 70 72 60 70 48C86 48 98 56 99 72Z"/>
-      <circle id="bud" class="leaf b" cx="100" cy="38" r="10"/>
-    </svg>
+    <svg id="plant" viewBox="0 0 200 180" aria-hidden="true"></svg>
     <div class="digits" id="timer-display" role="timer" aria-label="25 minutes 00 seconde">25:00</div>
     <div class="state"><span id="timer-mode-label">Concentration</span><span id="session-count">0 session aujourd'hui</span></div>
     <button class="active-chip" id="active-chip" onclick="showScreen('tasks')"></button>
@@ -134,11 +126,12 @@
 
 <section id="garden" class="screen hidden">
   <header class="top"><h1 class="title" id="garden-title">Votre jardin</h1></header>
-  <div class="stats" id="garden-stats"></div>
-  <div class="chips" id="chips-garden" style="margin-top:16px"></div>
-  <div id="garden-grid"></div>
+  <div class="gplant" id="garden-plant"></div>
+  <p class="gstage" id="garden-stage"></p>
   <h2 class="group">Espèces</h2>
   <div class="rows" id="species-list"></div>
+  <h2 class="group">Plantes fanées</h2>
+  <div class="rows" id="forest-list"></div>
 </section>
 
 <section id="settings" class="screen hidden">
@@ -162,8 +155,6 @@
       <label class="tog"><input type="checkbox" id="auto-break-toggle" onchange="saveSetting('autoBreak',this.checked)"/><i></i></label></div>
     <div class="set-row"><div><strong>Session automatique</strong><small>Relance la concentration après une pause</small></div>
       <label class="tog"><input type="checkbox" id="auto-focus-toggle" onchange="saveSetting('autoFocus',this.checked)"/><i></i></label></div>
-    <div class="set-row"><div><strong>Plante fanée</strong><small>Abandonner une session fane une plante du jardin</small></div>
-      <label class="tog"><input type="checkbox" id="wither-toggle" onchange="saveSetting('wither',this.checked)"/><i></i></label></div>
   </div>
   <h2 class="group">Apparence</h2>
   <div class="set"><div class="set-row col"><span>Thème</span><div class="chips" id="chips-theme"></div></div></div>
@@ -178,7 +169,7 @@
     <div class="set-row"><div><strong>Écran allumé</strong><small>Empêche la mise en veille</small></div>
       <label class="tog"><input type="checkbox" id="wake-toggle" onchange="toggleWakeLock(this)"/><i></i></label></div>
   </div>
-  <p class="foot">Seed v2.3</p>
+  <p class="foot">Seed v2.4</p>
 </section>
 
 <div id="install-banner">

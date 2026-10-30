@@ -38,12 +38,10 @@ const CATS = ['Travail','Dev','Perso','Réunion','Santé','Autre'];
 const CIRC = 2 * Math.PI * 104;
 
 const SPECIES = [
-  { id: 'sprout', name: 'Pousse', col: '#B9D94C', need: null },
-  { id: 'tulip', name: 'Tulipe', col: '#E5534B', need: ['streak', 3] },
-  { id: 'daisy', name: 'Pâquerette', col: '#EFE8CF', need: ['sessions', 25] },
-  { id: 'sunflower', name: 'Tournesol', col: '#F5B82E', need: ['streak', 7] },
-  { id: 'lavender', name: 'Lavande', col: '#8B6FD1', need: ['goal', 1] },
-  { id: 'tree', name: 'Chêne', col: '#2F6B4F', need: ['streak', 14] }
+  { id: 'apple', name: 'Pommier', leaf: '#4E9A63', fruit: '#D9363E', blossom: '#F8E1EA', need: null },
+  { id: 'cherry', name: 'Cerisier', leaf: '#6BAA75', fruit: '#A5122D', blossom: '#F6B8CC', need: ['streak', 30] },
+  { id: 'orange', name: 'Oranger', leaf: '#3F8A55', fruit: '#F29A24', blossom: '#FFFFFF', need: ['streak', 100] },
+  { id: 'lemon', name: 'Citronnier', leaf: '#5FA648', fruit: '#F2D624', blossom: '#FFFFFF', need: ['streak', 200] }
 ];
 const progress = k => ({
   streak: Math.max(state.timer.bestStreak || 0, state.timer.streakDays || 0),
@@ -69,12 +67,12 @@ function migrate() {
     delete k.subsDone; k.est ??= 0; k.spent ??= 0; k.priority ||= 'normal';
   });
   if (!state.tasks.some(k => k.id === state.activeTask && !k.done)) state.activeTask = null;
-  state.species = state.species || 'sprout';
-  if (!state.garden) {   // les sessions passées deviennent des pousses
-    state.garden = [];
-    Object.keys(state.history).sort().forEach(d => { for (let i = 0; i < state.history[d]; i++) state.garden.push({ d, s: 'sprout', w: 0 }); });
-  }
-  state.unlocked = state.unlocked || SPECIES.filter(meets).map(s => s.id);
+  if (!SPECIES.some(s => s.id === state.species)) state.species = 'apple';
+  delete state.garden; delete t.wither;
+  state.dead = state.dead || null;
+  state.forest = state.forest || [];
+  const had = state.unlocked || [];
+  state.unlocked = SPECIES.filter(sp => meets(sp) || had.includes(sp.id)).map(s => s.id);
 }
 migrate();
 
@@ -96,7 +94,6 @@ function init() {
   renderSettings();
   renderReports();
   renderGarden();
-  applySpecies();
   updateTimerDisplay();
   resumeTimer();
 }
@@ -190,7 +187,7 @@ function refreshDaily() {
   const t = state.timer, today = localDateKey();
   if (t.lastDate && t.lastDate !== today) {
     t.sessions = 0;
-    if (t.lastDate !== shiftDay(today, -1)) t.streakDays = 0;
+    if (t.lastDate !== shiftDay(today, -1) && t.streakDays > 0) { witherPlant(); showToast('Votre plante a fané… une nouvelle graine vous attend', 5000); }
   }
 }
 
@@ -212,11 +209,7 @@ function stopTicking() {
 function okToAbandon() {
   const t = state.timer;
   const started = t.mode === 'focus' && (t.running || t.timeLeft < t.durations.focus * 60);
-  if (!started) return true;
-  const msg = t.wither ? 'Abandonner la session ? Une plante fanée sera ajoutée à votre jardin.' : 'Abandonner la session en cours ? Elle ne sera pas comptée.';
-  if (!confirm(msg)) return false;
-  if (t.wither) { state.garden.push({ d: localDateKey(), s: state.species, w: 1 }); showToast('Une plante a fané…'); save(); }
-  return true;
+  return !started || confirm('Abandonner la session en cours ? Elle ne sera pas comptée.');
 }
 
 function toggleTimer() {
@@ -282,8 +275,7 @@ function updateTimerDisplay() {
   el.setAttribute('aria-label', `${+mm} minutes ${ss} secondes`);
   const total = state.timer.durations[state.timer.mode] * 60;
   const p = Math.min(1, Math.max(0, 1 - t / total));
-  document.getElementById('stem').style.strokeDashoffset = 1 - p;
-  [['leaf1',.3],['leaf2',.55],['leaf3',.8],['bud',.97]].forEach(([id,at]) => document.getElementById(id).classList.toggle('on', p >= at));
+  renderPlant(p);
   document.title = state.timer.running ? `${mm}:${ss} Seed` : 'Seed';
 }
 
@@ -552,7 +544,7 @@ function renderSettings() {
   const t = state.timer;
   ['focus', 'short', 'long'].forEach(renderStepper);
   document.getElementById('goal-val').textContent = t.goal;
-  [['sound-toggle', 'sound'], ['haptic-toggle', 'haptic'], ['auto-break-toggle', 'autoBreak'], ['auto-focus-toggle', 'autoFocus'], ['wither-toggle', 'wither']]
+  [['sound-toggle', 'sound'], ['haptic-toggle', 'haptic'], ['auto-break-toggle', 'autoBreak'], ['auto-focus-toggle', 'autoFocus']]
     .forEach(([id, k]) => document.getElementById(id).checked = !!t[k]);
   renderOpts('chips-theme', [['auto', 'Auto'], ['light', 'Clair'], ['dark', 'Sombre']], state.theme, 'setTheme');
   renderOpts('chips-sound', [['soft', 'Doux'], ['chime', 'Carillon'], ['beep', 'Bip']], t.soundKind, 'setSoundKind');
@@ -812,11 +804,12 @@ document.addEventListener('visibilitychange', () => {
   renderStreakDots();
   renderSessionCount();
   renderReports();
+  updateTimerDisplay();
   if (state.timer.running) tick();
 });
 
-// --- Jardin ---
-let gardenFilter = 'today';
+// --- Plante unique : 1 jour validé = 1 cran de croissance ---
+const STAGES = [[0, 'Graine'], [1, 'Pousse'], [7, 'Jeune plant'], [30, 'Arbuste'], [100, 'Arbre'], [200, 'Arbre en fleurs'], [300, 'Arbre fruitier'], [365, 'Arbre épanoui']];
 const speciesOf = id => SPECIES.find(s => s.id === id) || SPECIES[0];
 
 function checkUnlocks() {
@@ -825,50 +818,79 @@ function checkUnlocks() {
   return fresh;
 }
 
-function applySpecies() {
-  document.getElementById('app').style.setProperty('--bud', speciesOf(state.species).col);
+// Un jour raté : la plante fane, la série repart de zéro
+function witherPlant() {
+  const t = state.timer;
+  if (t.streakDays > 0) {
+    state.dead = { days: t.streakDays, sp: state.species };
+    state.forest.push({ days: t.streakDays, sp: state.species, d: localDateKey() });
+  }
+  t.streakDays = 0;
 }
 
-function setSpecies(id) { state.species = id; save(); applySpecies(); renderGarden(); }
-function setGardenFilter(v) { gardenFilter = v; renderGarden(); }
-
-function plantSVG(id, w) {
-  const sp = speciesOf(id), c = x => w ? '#A89F7B' : x;
-  const petals = (n, ry, cy, col) => [...Array(n)].map((_, i) => `<ellipse cy="${cy}" rx="3" ry="${ry}" fill="${col}" stroke="rgba(0,0,0,.18)" stroke-width=".6" transform="rotate(${i * 360 / n})"/>`).join('');
-  const heads = {
-    sprout: `<path d="M0 6C-9 6-13 0-13-6C-6-6 0-1 0 6Z" fill="${c('#2F8F5B')}"/><path d="M0 4C9 4 13-2 13-8C6-8 0-3 0 4Z" fill="${c(sp.col)}"/>`,
-    tulip: `<path d="M-7-6Q-7 7 0 8Q7 7 7-6L3-1 0-8-3-1Z" fill="${c(sp.col)}"/>`,
-    daisy: petals(8, 5, -6, c('#F6F2E4')) + `<circle r="3.5" fill="${c('#F5B82E')}"/>`,
-    sunflower: petals(10, 6, -7, c(sp.col)) + `<circle r="5" fill="${c('#6B4423')}"/>`,
-    lavender: [[0, -9], [-2.5, -5], [2.5, -5], [0, -1], [-2.5, 3], [2.5, 3]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.7" fill="${c(sp.col)}"/>`).join(''),
-    tree: [[0, -4, 9], [-6, 2, 6], [6, 2, 6]].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${c(sp.col)}"/>`).join('')
-  };
-  const stemStyle = w ? 'stroke:#9A8A5B' : id === 'tree' ? 'stroke:#7A5230' : 'stroke:var(--moss)';
-  return `<svg viewBox="0 0 40 44" aria-hidden="true"><path d="M4 42h32" style="stroke:var(--line)" stroke-width="2" stroke-linecap="round" fill="none"/>
-    <path d="${w ? 'M20 42C20 33 22 29 30 28' : 'M20 42V18'}" style="${stemStyle}" stroke-width="${id === 'tree' ? 4 : 2.5}" stroke-linecap="round" fill="none"/>
-    <g transform="${w ? 'translate(31 29) rotate(100)' : 'translate(20 17)'}">${heads[sp.id]}</g></svg>`;
+function treeInner(sp, d, w) {
+  d = Math.max(0, Math.min(365, d));
+  const G = 158, p = Math.min(1, d / 100), ease = x => x * x * (3 - 2 * x);
+  let out = '<path d="M24 158h152" style="stroke:var(--line)" stroke-width="2.5" stroke-linecap="round" fill="none"/>';
+  if (d < 0.03) return out + '<ellipse cx="100" cy="154" rx="9" ry="6" style="fill:var(--moss)"/>';
+  const H = 14 + 84 * Math.pow(p, 0.65), top = G - H, W = 2.5 + 6 * p, leafC = w ? '#A89F7B' : sp.leaf;
+  const bark = w ? '#8A7B55' : `color-mix(in srgb,#7A5230 ${Math.round(Math.min(1, Math.max(0, (d - 15) / 60)) * 100)}%,#3C8A55)`;
+  let g = `<path d="M100 156C100 ${G - H * 0.4} 95 ${G - H * 0.7} 100 ${top}" style="stroke:${bark}" stroke-width="${W}" stroke-linecap="round" fill="none"/>`;
+  if (d < 60) {
+    const n = Math.min(10, 1 + Math.floor(d / 3)), s = 4 + 8 * Math.min(1, d / 40);
+    for (let i = 0; i < n; i++) {
+      const y = top + (H * 0.9 * (i + 1)) / (n + 1), k = i % 2 ? 1 : -1, x = 100 + k * 2;
+      g += `<ellipse cx="${x + k * s}" cy="${y}" rx="${s * 1.1}" ry="${s * 0.5}" fill="${leafC}" transform="rotate(${-k * 28} ${x} ${y})"/>`;
+    }
+    g += `<ellipse cx="100" cy="${top - s * 0.5}" rx="${s * 0.5}" ry="${s}" fill="${leafC}"/>`;
+  }
+  if (d >= 25) {
+    const R = 8 + 40 * ease(Math.min(1, (d - 25) / 140)), cy = top - R * 0.25;
+    [[0, 0, 1], [-.62, .28, .72], [.62, .28, .72], [-.34, -.5, .7], [.4, -.55, .66]].forEach(([x, y, k], i) => {
+      g += `<circle cx="${100 + x * R}" cy="${cy + y * R}" r="${R * k}" fill="${leafC}" opacity="${i ? 0.93 : 1}"/>`;
+    });
+    if (!w) {
+      const POS = [[-.5, -.1], [.1, -.45], [.55, 0], [-.15, .3], [.35, .4], [-.6, .4], [0, -.1], [.7, -.35], [-.35, -.55], [.25, .1]];
+      const nb = d >= 200 ? Math.min(10, Math.ceil((d - 200) / 10)) : 0, nf = d > 300 ? Math.min(10, Math.ceil((d - 300) / 6.5)) : 0;
+      POS.forEach(([fx, fy], i) => {
+        const x = 100 + fx * R * 0.95, y = cy + fy * R * 0.95;
+        if (i < nf) g += `<circle cx="${x}" cy="${y}" r="${4 + R / 30}" fill="${sp.fruit}"/><circle cx="${x - 1.8}" cy="${y - 1.8}" r="1.4" fill="rgba(255,255,255,.45)"/>`;
+        else if (i < nb) g += `<circle cx="${x}" cy="${y}" r="2.6" fill="${sp.blossom}"/>`;
+      });
+    }
+  }
+  out += w ? `<g transform="rotate(9 100 158)">${g}</g><ellipse cx="68" cy="156" rx="6" ry="2.5" fill="#A89F7B"/><ellipse cx="134" cy="156" rx="5" ry="2" fill="#A89F7B"/>` : g;
+  return out;
 }
+const treeSVG = (sp, d, w) => `<svg viewBox="0 0 200 180" aria-hidden="true">${treeInner(sp, d, w)}</svg>`;
+
+// Sur l'écran du timer : la plante du jour grandit pendant la session de concentration
+function renderPlant(p) {
+  const t = state.timer, grow = t.mode === 'focus' && t.lastDate !== localDateKey() ? p : 0;
+  const el = document.getElementById('plant'), sp = speciesOf(state.species);
+  el.innerHTML = state.dead && !(grow > 0) ? treeInner(sp, state.dead.days, true) : treeInner(sp, t.streakDays + grow, false);
+}
+
+function setSpecies(id) { state.species = id; save(); updateTimerDisplay(); renderGarden(); }
 
 function renderGarden() {
-  const today = localDateKey(), g = state.garden;
-  const from = gardenFilter === 'today' ? today : gardenFilter === 'week' ? shiftDay(today, -6) : '';
-  const list = g.filter(p => !from || p.d >= from).slice(-400), groups = {};
-  list.forEach(p => (groups[p.d] = groups[p.d] || []).push(p));
-  const days = Object.keys(groups).sort().reverse();
-  const label = d => d === today ? "Aujourd'hui" : new Date(d + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+  const d = state.dead ? state.dead.days : state.timer.streakDays, wilt = !!state.dead, sp = speciesOf(state.species);
+  const i = STAGES.reduce((a, [n], k) => d >= n ? k : a, 0), nxt = STAGES[i + 1], left = nxt ? nxt[0] - d : 0;
   document.getElementById('garden-title').textContent = state.name;
-  document.getElementById('garden-stats').innerHTML = `<div><b>${g.filter(p => !p.w).length}</b><span>plantes</span></div><div><b>${state.unlocked.length}/${SPECIES.length}</b><span>espèces débloquées</span></div>`;
-  renderOpts('chips-garden', [['today', "Aujourd'hui"], ['week', '7 jours'], ['all', 'Tout']], gardenFilter, 'setGardenFilter');
-  document.getElementById('garden-grid').innerHTML = days.length
-    ? days.map(d => `<h3 class="gday">${label(d)} · ${groups[d].length}</h3><div class="gg">${groups[d].map(p => `<div class="pl${p.w ? ' w' : ''}">${plantSVG(p.s, p.w)}</div>`).join('')}</div>`).join('')
-    : '<div class="empty"><p>Aucune plante ici pour le moment. Terminez une session pour planter la première.</p></div>';
-  const needTxt = { streak: n => `Série de ${n} jours`, sessions: n => `${n} sessions terminées`, goal: n => `Objectif quotidien atteint ${n} fois` };
-  document.getElementById('species-list').innerHTML = SPECIES.map(sp => {
-    const ok = state.unlocked.includes(sp.id), cur = sp.id === state.species;
-    const need = sp.need ? needTxt[sp.need[0]](sp.need[1]) : 'Disponible dès le départ';
-    const meta = ok ? (cur ? 'Plantée à chaque session' : need) : `🔒 ${need} · ${Math.min(progress(sp.need[0]), sp.need[1])}/${sp.need[1]}`;
-    return `<div class="row${cur ? ' act' : ''}${ok ? '' : ' lock'}"${ok ? ` onclick="setSpecies('${sp.id}')"` : ''}><div class="sp-ico">${plantSVG(sp.id, false)}</div><div class="info"><div class="name">${sp.name}</div><div class="meta">${meta}</div></div></div>`;
+  document.getElementById('garden-plant').innerHTML = treeSVG(sp, d, wilt);
+  document.getElementById('garden-stage').innerHTML = wilt
+    ? `<b>Plante fanée</b>Elle avait atteint le stade « ${STAGES[i][1]} ». Terminez une session pour planter une nouvelle graine.`
+    : `<b>${STAGES[i][1]}</b>${nxt ? `Prochaine étape dans ${left} jour${left > 1 ? 's' : ''}, sans manquer un seul jour.` : 'Forme finale atteinte. Continuez pour la garder en vie.'}`;
+  document.getElementById('species-list').innerHTML = SPECIES.map(s => {
+    const ok = state.unlocked.includes(s.id), cur = s.id === state.species;
+    const need = s.need ? `Série de ${s.need[1]} jours` : 'Disponible dès le départ';
+    const meta = ok ? (cur ? 'Espèce actuelle' : need) : `🔒 ${need} · ${Math.min(progress('streak'), s.need[1])}/${s.need[1]}`;
+    return `<div class="row${cur ? ' act' : ''}${ok ? '' : ' lock'}"${ok ? ` onclick="setSpecies('${s.id}')"` : ''}><div class="sp-ico">${treeSVG(s, 365, false)}</div><div class="info"><div class="name">${s.name}</div><div class="meta">${meta}</div></div></div>`;
   }).join('');
+  const dead = state.forest.slice(-8).reverse();
+  document.getElementById('forest-list').innerHTML = dead.length
+    ? dead.map(f => `<div class="row dead"><div class="sp-ico">${treeSVG(speciesOf(f.sp), f.days, true)}</div><div class="info"><div class="name">${speciesOf(f.sp).name}</div><div class="meta">${f.days} jour${f.days > 1 ? 's' : ''} · fanée le ${new Date(f.d + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</div></div></div>`).join('')
+    : '<div class="empty"><p>Aucune plante fanée pour l\'instant.</p></div>';
 }
 
 function toggleZen(on) {
@@ -909,20 +931,21 @@ function handleSessionEnd(at = Date.now()) {
     t.totalMinutes += t.durations.focus;
     state.history[day] = (state.history[day] || 0) + 1;
     if (day === localDateKey()) t.sessions++;
-    if (t.lastDate !== day) {
-      t.streakDays = (t.lastDate === shiftDay(day, -1)) ? t.streakDays + 1 : 1;
+    const grew = t.lastDate !== day;
+    if (grew) {
+      if (t.lastDate === shiftDay(day, -1)) t.streakDays++;
+      else { witherPlant(); t.streakDays = 1; state.dead = null; }
       t.lastDate = day;
     }
     t.bestStreak = Math.max(t.bestStreak || 0, t.streakDays);
-    state.garden.push({ d: day, s: state.species, w: 0 });
     const fresh = checkUnlocks();
-    let msg = fresh.length ? 'Nouvelle espèce débloquée : ' + fresh.map(s => s.name).join(', ') : 'Une plante a poussé dans votre jardin';
+    let msg = fresh.length ? 'Nouvelle espèce débloquée : ' + fresh.map(s => s.name).join(', ') : grew ? 'Votre plante a grandi' : null;
     const task = state.tasks.find(k => k.id === state.activeTask);
     if (task) {
       task.spent++;
       if (task.est && task.spent === task.est && !fresh.length) msg = `Estimation atteinte : ${task.title}`;
     }
-    showToast(msg, 4000);
+    if (msg) showToast(msg, 4000);
     renderTimerTasks(); renderTasks(); renderStreakDots(); renderSessionCount();
     feedback();
     sendNotification('Session terminée', `Prenez une vraie pause. ${t.sessions} session(s) aujourd'hui.`);

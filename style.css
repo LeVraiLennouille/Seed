@@ -208,11 +208,10 @@ h1,h2,.brand,.digits,.stats b{font-family:var(--serif);font-weight:400}
 #app.zen .top,#app.zen .modes,#app.zen .pods-row,#app.zen .sec-h,#app.zen #timer-tasks,#app.zen #empty-tasks,#app.zen #notif-prompt,#app.zen .bottom-nav{display:none!important}
 #app.zen .stage{padding-top:12vh}
 
-/* v2.3 : jardin */
-#plant #bud{fill:var(--bud,var(--sprout));stroke:rgba(0,0,0,.18);stroke-width:1.5}
-.gday{font:600 14px var(--sans);color:var(--mute);margin:18px 0 8px}
-.gg{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.pl{background:var(--surf);border-radius:14px;padding:6px;aspect-ratio:1}.pl.w{opacity:.7}
-.pl svg,.sp-ico svg{width:100%;height:100%}
-.sp-ico{width:44px;height:44px;flex-shrink:0;background:var(--surf);border-radius:12px;padding:3px}
-.row.lock{opacity:.6;cursor:default}
+/* v2.4 : plante unique */
+.gplant svg{display:block;width:min(86vw,340px);margin:8px auto 0;overflow:visible;color:var(--mute)}
+.gstage{text-align:center;color:var(--mute);font-size:15px;margin-top:6px}
+.gstage b{display:block;font:400 24px var(--serif);color:var(--ink);margin-bottom:2px}
+.sp-ico{width:48px;height:48px;flex-shrink:0;background:var(--surf);border-radius:12px;padding:3px}
+.sp-ico svg{width:100%;height:100%}
+.row.lock,.row.dead{cursor:default}.row.lock{opacity:.6}
