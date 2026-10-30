@@ -1,6 +1,7 @@
-const CACHE_VERSION = 'seed-v2.0';
+const CACHE_VERSION = 'seed-v2.1';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
+const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
 
 const STATIC_ASSETS = [
   './index.html',
@@ -16,57 +17,60 @@ const STATIC_ASSETS = [
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_VERSION).then(cache => {
-      return Promise.allSettled(
-        STATIC_ASSETS.map(url =>
-          cache.add(url).catch(() => {})
-        )
-      );
-    }).then(() => self.skipWaiting())
+    caches.open(STATIC_CACHE).then(cache =>
+      Promise.allSettled(STATIC_ASSETS.map(url => cache.add(url)))
+    ).then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(
-        keys.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k))
-      )
+      Promise.all(keys.filter(k => !CURRENT_CACHES.includes(k)).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', event => {
-  const url = new URL(event.request.url);
+// Stale-while-revalidate : réponse immédiate depuis le cache, et mise à jour
+// du cache en arrière-plan pour la prochaine ouverture.
+async function staleWhileRevalidate(event, cacheName, isShell) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(event.request, { ignoreSearch: isShell });
 
-  if (url.hostname.includes('fonts.g')) {
-    event.respondWith(
-      caches.open(CACHE_VERSION).then(async cache => {
-        const cached = await cache.match(event.request);
-        const networkFetch = fetch(event.request)
-          .then(res => { cache.put(event.request, res.clone()); return res; })
-          .catch(() => null);
-        return cached || networkFetch;
-      })
-    );
-    return;
+  const network = fetch(event.request)
+    .then(res => {
+      if (res && (res.ok || res.type === 'opaque')) {
+        cache.put(event.request, res.clone()).catch(() => {});
+      }
+      return res;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    event.waitUntil(network);
+    return cached;
   }
 
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-      return fetch(event.request).then(res => {
-        if (!res || res.status !== 200 || res.type === 'opaque') return res;
-        const clone = res.clone();
-        caches.open(CACHE_VERSION).then(c => c.put(event.request, clone));
-        return res;
-      }).catch(() => {
-        if (event.request.destination === 'document') {
-          return caches.match('./index.html');
-        }
-      });
-    })
-  );
+  const res = await network;
+  if (res) return res;
+
+  if (event.request.mode === 'navigate') {
+    const fallback = await cache.match('./index.html');
+    if (fallback) return fallback;
+  }
+  return Response.error();
+}
+
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+
+  const url = new URL(req.url);
+  if (url.origin === self.location.origin) {
+    event.respondWith(staleWhileRevalidate(event, STATIC_CACHE, true));
+  } else if (url.hostname.endsWith('googleapis.com') || url.hostname.endsWith('gstatic.com')) {
+    event.respondWith(staleWhileRevalidate(event, RUNTIME_CACHE, false));
+  }
 });
 
 self.addEventListener('message', event => {

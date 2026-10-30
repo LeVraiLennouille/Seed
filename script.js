@@ -40,9 +40,7 @@ const CIRC = 2 * Math.PI * 104;
 function save() { localStorage.setItem('pomodo_state', JSON.stringify(state)); }
 
 function init() {
-  const today = new Date().toISOString().split('T')[0];
-  if (state.timer.lastDate && state.timer.lastDate !== today) state.timer.sessions = 0;
-  state.timer.running = false;
+  refreshDaily();
   if (state.darkMode) { document.documentElement.setAttribute('data-dark','true'); document.getElementById('dark-toggle').checked = true; }
   if (!state.onboarded) { showRaw('onboarding'); }
   else { showRaw(state.currentScreen==='onboarding'?'timer':state.currentScreen); }
@@ -54,6 +52,7 @@ function init() {
   renderSettings();
   renderReports();
   updateTimerDisplay();
+  resumeTimer();
 }
 
 const MODE_LABELS = { focus:'Concentration', short:'Pause courte', long:'Pause longue' };
@@ -120,7 +119,7 @@ function finishOnboarding() {
 }
 
 function switchMode(mode, btn) {
-  if (state.timer.running) { clearInterval(timerInterval); timerInterval = null; state.timer.running = false; }
+  stopTicking();
   state.timer.mode = mode;
   state.timer.timeLeft = state.timer.durations[mode] * 60;
   applyModeUI();
@@ -128,29 +127,90 @@ function switchMode(mode, btn) {
   save();
 }
 
+// --- Dates locales (clé AAAA-MM-JJ) ---
+function localDateKey(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function shiftDay(key, n) {
+  const [y, m, d] = key.split('-').map(Number);
+  return localDateKey(new Date(y, m - 1, d + n));
+}
+
+// Nouveau jour : remet à zéro les sessions du jour, et la série si un jour a été manqué
+function refreshDaily() {
+  const t = state.timer, today = localDateKey();
+  if (t.lastDate && t.lastDate !== today) {
+    t.sessions = 0;
+    if (t.lastDate !== shiftDay(today, -1)) t.streakDays = 0;
+  }
+}
+
+// --- Timer basé sur une heure de fin absolue (endTime) ---
+function startTicking() {
+  clearInterval(timerInterval);
+  timerInterval = setInterval(tick, 250);
+}
+
+function stopTicking() {
+  clearInterval(timerInterval);
+  timerInterval = null;
+  state.timer.running = false;
+  state.timer.endTime = null;
+}
+
 function toggleTimer() {
-  if (state.timer.running) {
-    clearInterval(timerInterval); timerInterval = null;
-    state.timer.running = false;
+  const t = state.timer;
+  if (t.running) {
+    const remaining = Math.ceil((t.endTime - Date.now()) / 1000);
+    if (remaining <= 0) { tick(); return; }
+    stopTicking();
+    t.timeLeft = remaining;
     updatePlayIcon(false);
+    updateTimerDisplay();
   } else {
-    state.timer.running = true;
+    t.running = true;
+    t.endTime = Date.now() + t.timeLeft * 1000;
     updatePlayIcon(true);
-    timerInterval = setInterval(tick, 1000);
+    startTicking();
   }
   save();
 }
 
 function tick() {
-  if (state.timer.timeLeft <= 0) {
-    clearInterval(timerInterval); timerInterval = null;
-    state.timer.running = false;
+  const t = state.timer;
+  if (!t.running || !t.endTime) return;
+  const remaining = Math.max(0, Math.ceil((t.endTime - Date.now()) / 1000));
+  if (remaining === 0) {
+    const endedAt = t.endTime;
+    stopTicking();
+    t.timeLeft = 0;
+    updateTimerDisplay();
     updatePlayIcon(false);
-    handleSessionEnd();
+    handleSessionEnd(endedAt);
     return;
   }
-  state.timer.timeLeft--;
-  updateTimerDisplay();
+  if (remaining !== t.timeLeft) {
+    t.timeLeft = remaining;
+    updateTimerDisplay();
+  }
+}
+
+// Au chargement : reprend un timer en cours, ou clôture une session terminée pendant l'absence
+function resumeTimer() {
+  const t = state.timer;
+  if (!t.running || !t.endTime) { t.running = false; t.endTime = null; return; }
+  const remaining = Math.ceil((t.endTime - Date.now()) / 1000);
+  if (remaining > 0) {
+    t.timeLeft = remaining;
+    updatePlayIcon(true);
+    updateTimerDisplay();
+    startTicking();
+  } else {
+    const endedAt = t.endTime;
+    t.running = false; t.endTime = null; t.timeLeft = 0;
+    handleSessionEnd(endedAt);
+  }
 }
 
 function updateTimerDisplay() {
@@ -173,8 +233,7 @@ function updatePlayIcon(playing) {
 }
 
 function skipTimer() {
-  clearInterval(timerInterval); timerInterval = null;
-  state.timer.running = false;
+  stopTicking();
   updatePlayIcon(false);
   const modes = ['focus','short','long'];
   const next = modes[(modes.indexOf(state.timer.mode)+1)%3];
@@ -183,8 +242,7 @@ function skipTimer() {
 }
 
 function resetTimer() {
-  clearInterval(timerInterval); timerInterval = null;
-  state.timer.running = false;
+  stopTicking();
   updatePlayIcon(false);
   const d = state.timer.durations;
   const mins = { focus: d.focus, short: d.short, long: d.long }[state.timer.mode];
@@ -377,7 +435,7 @@ function renderWeekChart() {
   const data = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now); d.setDate(d.getDate() - i);
-    const key = d.toISOString().split('T')[0];
+    const key = localDateKey(d);
     data.push({ label: d.toLocaleDateString('fr-FR', { weekday: 'narrow' }).toUpperCase(), val: state.history[key] || 0 });
   }
   const max = Math.max(...data.map(d => d.val), 1);
@@ -540,47 +598,36 @@ function sendNotification(title, body) {
   }
 }
 
-let hiddenAt = null;
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    hiddenAt = state.timer.running ? Date.now() : null;
-  } else if (hiddenAt && state.timer.running) {
-    const elapsed = Math.floor((Date.now() - hiddenAt) / 1000);
-    hiddenAt = null;
-    if (elapsed > 0) {
-      state.timer.timeLeft = Math.max(0, state.timer.timeLeft - elapsed);
-      updateTimerDisplay();
-      if (state.timer.timeLeft === 0) {
-        clearInterval(timerInterval); timerInterval = null;
-        state.timer.running = false;
-        updatePlayIcon(false);
-        handleSessionEnd();
-      }
-    }
-  }
+  if (document.hidden) return;
+  refreshDaily();
+  renderStreakDots();
+  renderSessionCount();
+  renderReports();
+  if (state.timer.running) tick();
 });
 
-function handleSessionEnd() {
-  if (state.timer.mode === 'focus') {
-    state.timer.sessions++;
-    state.timer.totalSessions++;
-    state.timer.totalMinutes += state.timer.durations.focus;
-    const today = new Date().toISOString().split('T')[0];
-    state.history[today] = (state.history[today] || 0) + 1;
-    const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
-    if (state.timer.lastDate === today) {}
-    else if (state.timer.lastDate === yesterday) { state.timer.streakDays++; }
-    else { state.timer.streakDays = 1; }
-    state.timer.lastDate = today;
+function handleSessionEnd(at = Date.now()) {
+  const t = state.timer;
+  if (t.mode === 'focus') {
+    const day = localDateKey(new Date(at));
+    t.totalSessions++;
+    t.totalMinutes += t.durations.focus;
+    state.history[day] = (state.history[day] || 0) + 1;
+    if (day === localDateKey()) t.sessions++;
+    if (t.lastDate !== day) {
+      t.streakDays = (t.lastDate === shiftDay(day, -1)) ? t.streakDays + 1 : 1;
+      t.lastDate = day;
+    }
     renderStreakDots();
     renderSessionCount();
-    if (state.timer.sound) playBeep();
-    sendNotification('Session terminée', `Prenez une vraie pause. ${state.timer.sessions} session(s) aujourd'hui.`);
+    if (t.sound) playBeep();
+    sendNotification('Session terminée', `Prenez une vraie pause. ${t.sessions} session(s) aujourd'hui.`);
     checkNotifPermission();
-    const mode = state.timer.sessions % 4 === 0 ? 'long' : 'short';
-    switchMode(mode, document.getElementById('tab-'+mode));
+    const mode = (t.sessions > 0 && t.sessions % 4 === 0) ? 'long' : 'short';
+    switchMode(mode, document.getElementById('tab-' + mode));
   } else {
-    if (state.timer.sound) playBeep();
+    if (t.sound) playBeep();
     sendNotification('Pause terminée', 'Prêt pour une nouvelle session ?');
     switchMode('focus', document.getElementById('tab-focus'));
   }
