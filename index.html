@@ -31,6 +31,7 @@
   <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 9.5V13l2.5 1.5M9.5 3h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-tasks" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3.5 6l1.3 1.3L7 5M3.5 12l1.3 1.3L7 11M3.5 18l1.3 1.3L7 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-focus" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M5 19C5 10 10 5 19 5C19 14 14 19 5 19ZM5 19L13 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 20V12M12 20V5M19 20v-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
 </svg>
 
@@ -131,6 +132,15 @@
   </div>
 </section>
 
+<section id="garden" class="screen hidden">
+  <header class="top"><h1 class="title" id="garden-title">Votre jardin</h1></header>
+  <div class="stats" id="garden-stats"></div>
+  <div class="chips" id="chips-garden" style="margin-top:16px"></div>
+  <div id="garden-grid"></div>
+  <h2 class="group">Espèces</h2>
+  <div class="rows" id="species-list"></div>
+</section>
+
 <section id="settings" class="screen hidden">
   <header class="top"><button class="icon-btn" onclick="goBack()" aria-label="Retour"><svg><use href="#i-back"/></svg></button><h1 class="title">Paramètres</h1><span style="width:44px"></span></header>
   <div class="profile">
@@ -152,6 +162,8 @@
       <label class="tog"><input type="checkbox" id="auto-break-toggle" onchange="saveSetting('autoBreak',this.checked)"/><i></i></label></div>
     <div class="set-row"><div><strong>Session automatique</strong><small>Relance la concentration après une pause</small></div>
       <label class="tog"><input type="checkbox" id="auto-focus-toggle" onchange="saveSetting('autoFocus',this.checked)"/><i></i></label></div>
+    <div class="set-row"><div><strong>Plante fanée</strong><small>Abandonner une session fane une plante du jardin</small></div>
+      <label class="tog"><input type="checkbox" id="wither-toggle" onchange="saveSetting('wither',this.checked)"/><i></i></label></div>
   </div>
   <h2 class="group">Apparence</h2>
   <div class="set"><div class="set-row col"><span>Thème</span><div class="chips" id="chips-theme"></div></div></div>
@@ -166,7 +178,7 @@
     <div class="set-row"><div><strong>Écran allumé</strong><small>Empêche la mise en veille</small></div>
       <label class="tog"><input type="checkbox" id="wake-toggle" onchange="toggleWakeLock(this)"/><i></i></label></div>
   </div>
-  <p class="foot">Seed v2.2</p>
+  <p class="foot">Seed v2.3</p>
 </section>
 
 <div id="install-banner">
@@ -198,6 +210,7 @@
 <nav class="bottom-nav" id="bottom-nav">
   <button class="nav-item" id="nav-timer" onclick="showScreen('timer')"><svg><use href="#i-timer"/></svg><span>Timer</span></button>
   <button class="nav-item" id="nav-tasks" onclick="showScreen('tasks')"><svg><use href="#i-tasks"/></svg><span>Tâches</span></button>
+  <button class="nav-item" id="nav-garden" onclick="showScreen('garden')"><svg><use href="#i-leaf"/></svg><span>Jardin</span></button>
   <button class="nav-item" id="nav-reports" onclick="showScreen('reports')"><svg><use href="#i-chart"/></svg><span>Rapports</span></button>
 </nav>
 </div>

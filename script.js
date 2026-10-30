@@ -37,6 +37,21 @@ const COLORS = ['#E5534B','#3B82F6','#22C55E','#F59E0B','#8B5CF6','#EC4899','#14
 const CATS = ['Travail','Dev','Perso','Réunion','Santé','Autre'];
 const CIRC = 2 * Math.PI * 104;
 
+const SPECIES = [
+  { id: 'sprout', name: 'Pousse', col: '#B9D94C', need: null },
+  { id: 'tulip', name: 'Tulipe', col: '#E5534B', need: ['streak', 3] },
+  { id: 'daisy', name: 'Pâquerette', col: '#EFE8CF', need: ['sessions', 25] },
+  { id: 'sunflower', name: 'Tournesol', col: '#F5B82E', need: ['streak', 7] },
+  { id: 'lavender', name: 'Lavande', col: '#8B6FD1', need: ['goal', 1] },
+  { id: 'tree', name: 'Chêne', col: '#2F6B4F', need: ['streak', 14] }
+];
+const progress = k => ({
+  streak: Math.max(state.timer.bestStreak || 0, state.timer.streakDays || 0),
+  sessions: state.timer.totalSessions,
+  goal: Object.values(state.history).filter(n => n >= state.timer.goal).length
+})[k];
+const meets = sp => !sp.need || progress(sp.need[0]) >= sp.need[1];
+
 function migrate() {
   const t = state.timer;
   state.cats = state.cats || [...CATS];
@@ -44,7 +59,7 @@ function migrate() {
   state.name = state.name || 'Votre jardin';
   state.activeTask = state.activeTask || null;
   t.sound ??= true; t.soundKind ||= 'soft'; t.ambient ||= 'off'; t.haptic ??= true;
-  t.autoBreak ??= false; t.autoFocus ??= false;
+  t.autoBreak ??= false; t.autoFocus ??= false; t.wither ??= false;
   t.bestStreak = Math.max(t.bestStreak || 0, t.streakDays || 0);
   state.tasks.forEach(k => {
     if (!Array.isArray(k.subs)) {
@@ -54,6 +69,12 @@ function migrate() {
     delete k.subsDone; k.est ??= 0; k.spent ??= 0; k.priority ||= 'normal';
   });
   if (!state.tasks.some(k => k.id === state.activeTask && !k.done)) state.activeTask = null;
+  state.species = state.species || 'sprout';
+  if (!state.garden) {   // les sessions passées deviennent des pousses
+    state.garden = [];
+    Object.keys(state.history).sort().forEach(d => { for (let i = 0; i < state.history[d]; i++) state.garden.push({ d, s: 'sprout', w: 0 }); });
+  }
+  state.unlocked = state.unlocked || SPECIES.filter(meets).map(s => s.id);
 }
 migrate();
 
@@ -74,6 +95,8 @@ function init() {
   renderTasks();
   renderSettings();
   renderReports();
+  renderGarden();
+  applySpecies();
   updateTimerDisplay();
   resumeTimer();
 }
@@ -109,6 +132,7 @@ function showScreen(id) {
   showRaw(id);
   if (id === 'tasks') { renderTasks(); }
   if (id === 'reports') { renderReports(); }
+  if (id === 'garden') { renderGarden(); }
   if (id === 'settings') { renderSettings(); }
   if (id === 'timer') { renderTimerTasks(); renderStreakDots(); }
 }
@@ -188,7 +212,11 @@ function stopTicking() {
 function okToAbandon() {
   const t = state.timer;
   const started = t.mode === 'focus' && (t.running || t.timeLeft < t.durations.focus * 60);
-  return !started || confirm('Abandonner la session en cours ? Elle ne sera pas comptée.');
+  if (!started) return true;
+  const msg = t.wither ? 'Abandonner la session ? Une plante fanée sera ajoutée à votre jardin.' : 'Abandonner la session en cours ? Elle ne sera pas comptée.';
+  if (!confirm(msg)) return false;
+  if (t.wither) { state.garden.push({ d: localDateKey(), s: state.species, w: 1 }); showToast('Une plante a fané…'); save(); }
+  return true;
 }
 
 function toggleTimer() {
@@ -524,7 +552,7 @@ function renderSettings() {
   const t = state.timer;
   ['focus', 'short', 'long'].forEach(renderStepper);
   document.getElementById('goal-val').textContent = t.goal;
-  [['sound-toggle', 'sound'], ['haptic-toggle', 'haptic'], ['auto-break-toggle', 'autoBreak'], ['auto-focus-toggle', 'autoFocus']]
+  [['sound-toggle', 'sound'], ['haptic-toggle', 'haptic'], ['auto-break-toggle', 'autoBreak'], ['auto-focus-toggle', 'autoFocus'], ['wither-toggle', 'wither']]
     .forEach(([id, k]) => document.getElementById(id).checked = !!t[k]);
   renderOpts('chips-theme', [['auto', 'Auto'], ['light', 'Clair'], ['dark', 'Sombre']], state.theme, 'setTheme');
   renderOpts('chips-sound', [['soft', 'Doux'], ['chime', 'Carillon'], ['beep', 'Bip']], t.soundKind, 'setSoundKind');
@@ -787,6 +815,62 @@ document.addEventListener('visibilitychange', () => {
   if (state.timer.running) tick();
 });
 
+// --- Jardin ---
+let gardenFilter = 'today';
+const speciesOf = id => SPECIES.find(s => s.id === id) || SPECIES[0];
+
+function checkUnlocks() {
+  const fresh = SPECIES.filter(sp => !state.unlocked.includes(sp.id) && meets(sp));
+  fresh.forEach(sp => state.unlocked.push(sp.id));
+  return fresh;
+}
+
+function applySpecies() {
+  document.getElementById('app').style.setProperty('--bud', speciesOf(state.species).col);
+}
+
+function setSpecies(id) { state.species = id; save(); applySpecies(); renderGarden(); }
+function setGardenFilter(v) { gardenFilter = v; renderGarden(); }
+
+function plantSVG(id, w) {
+  const sp = speciesOf(id), c = x => w ? '#A89F7B' : x;
+  const petals = (n, ry, cy, col) => [...Array(n)].map((_, i) => `<ellipse cy="${cy}" rx="3" ry="${ry}" fill="${col}" stroke="rgba(0,0,0,.18)" stroke-width=".6" transform="rotate(${i * 360 / n})"/>`).join('');
+  const heads = {
+    sprout: `<path d="M0 6C-9 6-13 0-13-6C-6-6 0-1 0 6Z" fill="${c('#2F8F5B')}"/><path d="M0 4C9 4 13-2 13-8C6-8 0-3 0 4Z" fill="${c(sp.col)}"/>`,
+    tulip: `<path d="M-7-6Q-7 7 0 8Q7 7 7-6L3-1 0-8-3-1Z" fill="${c(sp.col)}"/>`,
+    daisy: petals(8, 5, -6, c('#F6F2E4')) + `<circle r="3.5" fill="${c('#F5B82E')}"/>`,
+    sunflower: petals(10, 6, -7, c(sp.col)) + `<circle r="5" fill="${c('#6B4423')}"/>`,
+    lavender: [[0, -9], [-2.5, -5], [2.5, -5], [0, -1], [-2.5, 3], [2.5, 3]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.7" fill="${c(sp.col)}"/>`).join(''),
+    tree: [[0, -4, 9], [-6, 2, 6], [6, 2, 6]].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${c(sp.col)}"/>`).join('')
+  };
+  const stemStyle = w ? 'stroke:#9A8A5B' : id === 'tree' ? 'stroke:#7A5230' : 'stroke:var(--moss)';
+  return `<svg viewBox="0 0 40 44" aria-hidden="true"><path d="M4 42h32" style="stroke:var(--line)" stroke-width="2" stroke-linecap="round" fill="none"/>
+    <path d="${w ? 'M20 42C20 33 22 29 30 28' : 'M20 42V18'}" style="${stemStyle}" stroke-width="${id === 'tree' ? 4 : 2.5}" stroke-linecap="round" fill="none"/>
+    <g transform="${w ? 'translate(31 29) rotate(100)' : 'translate(20 17)'}">${heads[sp.id]}</g></svg>`;
+}
+
+function renderGarden() {
+  const today = localDateKey(), g = state.garden;
+  const from = gardenFilter === 'today' ? today : gardenFilter === 'week' ? shiftDay(today, -6) : '';
+  const list = g.filter(p => !from || p.d >= from).slice(-400), groups = {};
+  list.forEach(p => (groups[p.d] = groups[p.d] || []).push(p));
+  const days = Object.keys(groups).sort().reverse();
+  const label = d => d === today ? "Aujourd'hui" : new Date(d + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+  document.getElementById('garden-title').textContent = state.name;
+  document.getElementById('garden-stats').innerHTML = `<div><b>${g.filter(p => !p.w).length}</b><span>plantes</span></div><div><b>${state.unlocked.length}/${SPECIES.length}</b><span>espèces débloquées</span></div>`;
+  renderOpts('chips-garden', [['today', "Aujourd'hui"], ['week', '7 jours'], ['all', 'Tout']], gardenFilter, 'setGardenFilter');
+  document.getElementById('garden-grid').innerHTML = days.length
+    ? days.map(d => `<h3 class="gday">${label(d)} · ${groups[d].length}</h3><div class="gg">${groups[d].map(p => `<div class="pl${p.w ? ' w' : ''}">${plantSVG(p.s, p.w)}</div>`).join('')}</div>`).join('')
+    : '<div class="empty"><p>Aucune plante ici pour le moment. Terminez une session pour planter la première.</p></div>';
+  const needTxt = { streak: n => `Série de ${n} jours`, sessions: n => `${n} sessions terminées`, goal: n => `Objectif quotidien atteint ${n} fois` };
+  document.getElementById('species-list').innerHTML = SPECIES.map(sp => {
+    const ok = state.unlocked.includes(sp.id), cur = sp.id === state.species;
+    const need = sp.need ? needTxt[sp.need[0]](sp.need[1]) : 'Disponible dès le départ';
+    const meta = ok ? (cur ? 'Plantée à chaque session' : need) : `🔒 ${need} · ${Math.min(progress(sp.need[0]), sp.need[1])}/${sp.need[1]}`;
+    return `<div class="row${cur ? ' act' : ''}${ok ? '' : ' lock'}"${ok ? ` onclick="setSpecies('${sp.id}')"` : ''}><div class="sp-ico">${plantSVG(sp.id, false)}</div><div class="info"><div class="name">${sp.name}</div><div class="meta">${meta}</div></div></div>`;
+  }).join('');
+}
+
 function toggleZen(on) {
   const app = document.getElementById('app'), z = on === undefined ? !app.classList.contains('zen') : on;
   app.classList.toggle('zen', z);
@@ -830,11 +914,15 @@ function handleSessionEnd(at = Date.now()) {
       t.lastDate = day;
     }
     t.bestStreak = Math.max(t.bestStreak || 0, t.streakDays);
+    state.garden.push({ d: day, s: state.species, w: 0 });
+    const fresh = checkUnlocks();
+    let msg = fresh.length ? 'Nouvelle espèce débloquée : ' + fresh.map(s => s.name).join(', ') : 'Une plante a poussé dans votre jardin';
     const task = state.tasks.find(k => k.id === state.activeTask);
     if (task) {
       task.spent++;
-      if (task.est && task.spent === task.est) showToast(`Estimation atteinte : ${task.title}`, 4000);
+      if (task.est && task.spent === task.est && !fresh.length) msg = `Estimation atteinte : ${task.title}`;
     }
+    showToast(msg, 4000);
     renderTimerTasks(); renderTasks(); renderStreakDots(); renderSessionCount();
     feedback();
     sendNotification('Session terminée', `Prenez une vraie pause. ${t.sessions} session(s) aujourd'hui.`);
