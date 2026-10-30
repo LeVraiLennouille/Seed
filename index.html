@@ -30,6 +30,7 @@
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 9.5V13l2.5 1.5M9.5 3h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-tasks" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3.5 6l1.3 1.3L7 5M3.5 12l1.3 1.3L7 11M3.5 18l1.3 1.3L7 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-focus" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 20V12M12 20V5M19 20v-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
 </svg>
 
@@ -66,7 +67,7 @@
 <section id="timer" class="screen hidden">
   <header class="top">
     <span class="brand">Seed</span>
-    <button class="icon-btn" onclick="showScreen('settings')" aria-label="Paramètres"><svg><use href="#i-gear"/></svg></button>
+    <div class="hbtns"><button class="icon-btn" onclick="toggleZen()" aria-label="Mode ciblé"><svg><use href="#i-focus"/></svg></button><button class="icon-btn" onclick="showScreen('settings')" aria-label="Paramètres"><svg><use href="#i-gear"/></svg></button></div>
   </header>
   <div class="modes" role="tablist">
     <button class="tab-btn active" id="tab-focus" onclick="switchMode('focus',this)">Concentration</button>
@@ -90,6 +91,7 @@
     </svg>
     <div class="digits" id="timer-display" role="timer" aria-label="25 minutes 00 seconde">25:00</div>
     <div class="state"><span id="timer-mode-label">Concentration</span><span id="session-count">0 session aujourd'hui</span></div>
+    <button class="active-chip" id="active-chip" onclick="showScreen('tasks')"></button>
     <div class="controls">
       <button class="ghost" onclick="resetTimer()" aria-label="Réinitialiser"><svg><use href="#i-reset"/></svg></button>
       <button class="go" id="play-btn" onclick="toggleTimer()"><svg id="play-icon"><use href="#i-play"/></svg><span id="play-label">Démarrer</span></button>
@@ -108,6 +110,7 @@
     <button class="tasks-tab active" id="ttab-active" onclick="switchTaskTab('active')">En cours <b id="active-count">0</b></button>
     <button class="tasks-tab" id="ttab-done" onclick="switchTaskTab('done')">Terminées <b id="done-count">0</b></button>
   </div>
+  <p class="hint">Touchez une tâche pour la rendre active · appui long pour la modifier · glissez vers la gauche pour la supprimer</p>
   <div id="tasks-list" class="rows"></div>
   <button class="fab" onclick="openAddTask()"><svg><use href="#i-plus"/></svg>Nouvelle tâche</button>
 </section>
@@ -120,6 +123,7 @@
     <div><b id="streak-days">0</b><span>jours d'affilée</span></div>
     <div><b id="tasks-done">0</b><span>tâches terminées</span></div>
   </div>
+  <div class="block"><h2>Records</h2><div class="stats" id="records"></div></div>
   <div class="block"><h2>Les 7 derniers jours</h2><div class="week" id="week-chart"></div></div>
   <div class="block"><h2>Ce mois-ci</h2>
     <div class="heat-labels"><i>L</i><i>M</i><i>M</i><i>J</i><i>V</i><i>S</i><i>D</i></div>
@@ -131,7 +135,7 @@
   <header class="top"><button class="icon-btn" onclick="goBack()" aria-label="Retour"><svg><use href="#i-back"/></svg></button><h1 class="title">Paramètres</h1><span style="width:44px"></span></header>
   <div class="profile">
     <div class="avatar"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="14" rx="5" ry="3.5" fill="currentColor"/><path d="M12 12V6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
-    <div><strong id="profile-name">Votre jardin</strong>
+    <div><input id="profile-name" class="name-inp" maxlength="24" aria-label="Nom du jardin" onchange="setGardenName(this.value)"/>
       <div class="pstats"><span><b id="prof-tasks">0</b> tâches</span><span><b id="prof-sessions">0</b> sessions</span><span><b id="prof-mins">0</b> min</span></div></div>
   </div>
   <h2 class="group">Durées, en minutes</h2>
@@ -140,18 +144,29 @@
     <div class="set-row col"><span>Pause courte</span><div class="chips" id="chips-short"></div></div>
     <div class="set-row col"><span>Pause longue</span><div class="chips" id="chips-long"></div></div>
   </div>
-  <h2 class="group">Préférences</h2>
+  <h2 class="group">Rythme</h2>
   <div class="set">
-    <div class="set-row"><div><strong>Mode sombre</strong><small>Palette de nuit</small></div>
-      <label class="tog"><input type="checkbox" id="dark-toggle" onchange="toggleDarkMode(this)"/><i></i></label></div>
     <div class="set-row"><div><strong>Objectif quotidien</strong><small>Sessions visées par jour</small></div>
       <div class="stepper"><button onclick="adjGoal(-1)" aria-label="Moins">&minus;</button><span id="goal-val">8</span><button onclick="adjGoal(1)" aria-label="Plus">+</button></div></div>
-    <div class="set-row"><div><strong>Son de fin de session</strong><small>Un bip court</small></div>
+    <div class="set-row"><div><strong>Pause automatique</strong><small>Lance la pause à la fin d'une session</small></div>
+      <label class="tog"><input type="checkbox" id="auto-break-toggle" onchange="saveSetting('autoBreak',this.checked)"/><i></i></label></div>
+    <div class="set-row"><div><strong>Session automatique</strong><small>Relance la concentration après une pause</small></div>
+      <label class="tog"><input type="checkbox" id="auto-focus-toggle" onchange="saveSetting('autoFocus',this.checked)"/><i></i></label></div>
+  </div>
+  <h2 class="group">Apparence</h2>
+  <div class="set"><div class="set-row col"><span>Thème</span><div class="chips" id="chips-theme"></div></div></div>
+  <h2 class="group">Sons et alertes</h2>
+  <div class="set">
+    <div class="set-row"><div><strong>Son de fin de session</strong><small>Un signal sonore</small></div>
       <label class="tog"><input type="checkbox" id="sound-toggle" checked onchange="saveSetting('sound',this.checked)"/><i></i></label></div>
+    <div class="set-row col"><span>Choix du son</span><div class="chips" id="chips-sound"></div></div>
+    <div class="set-row col"><div><strong>Bruit de fond</strong><small>Pendant les sessions de concentration</small></div><div class="chips" id="chips-ambient"></div></div>
+    <div class="set-row"><div><strong>Vibration</strong><small>À la fin de chaque session</small></div>
+      <label class="tog"><input type="checkbox" id="haptic-toggle" onchange="saveSetting('haptic',this.checked)"/><i></i></label></div>
     <div class="set-row"><div><strong>Écran allumé</strong><small>Empêche la mise en veille</small></div>
       <label class="tog"><input type="checkbox" id="wake-toggle" onchange="toggleWakeLock(this)"/><i></i></label></div>
   </div>
-  <p class="foot">Seed v1.2</p>
+  <p class="foot">Seed v2.2</p>
 </section>
 
 <div id="install-banner">
@@ -161,17 +176,24 @@
 <div id="offline-toast" role="status"><i class="toast-dot" id="toast-dot"></i><span id="toast-msg">Hors ligne, données sauvegardées</span></div>
 
 <div class="modal-overlay" id="add-task-modal" onclick="closeModal(event)">
-  <div class="sheet" role="dialog" aria-label="Nouvelle tâche">
-    <h2>Nouvelle tâche</h2>
+  <div class="sheet" role="dialog" aria-label="Tâche">
+    <h2 id="sheet-title">Nouvelle tâche</h2>
     <label class="input-label" for="task-input">Titre</label>
     <input class="inp" type="text" id="task-input" placeholder="Réviser le chapitre 3" maxlength="60"/>
     <span class="input-label">Catégorie</span>
     <div class="cat-select" id="cat-select"></div>
     <span class="input-label">Couleur</span>
     <div class="color-swatches" id="color-swatches"></div>
-    <div class="row-btns"><button class="btn ghost-btn" onclick="closeAddTask()">Annuler</button><button class="btn" onclick="saveTask()">Ajouter la tâche</button></div>
+    <span class="input-label">Priorité</span>
+    <div class="chips" id="prio-select"></div>
+    <div class="set-row" style="border:0;padding-bottom:0"><div><strong>Pomodoros estimés</strong><small>0 : pas d'estimation</small></div><div class="stepper"><button onclick="adjEst(-1)" aria-label="Moins">&minus;</button><span id="est-val">0</span><button onclick="adjEst(1)" aria-label="Plus">+</button></div></div>
+    <span class="input-label">Sous-tâches</span>
+    <div id="sub-list"></div>
+    <input class="inp" id="sub-input" placeholder="Ajouter une sous-tâche" maxlength="60" onkeydown="if(event.key==='Enter'){addSub();event.preventDefault()}"/>
+    <div class="row-btns"><button class="btn ghost-btn" id="del-btn" onclick="deleteEditing()">Supprimer</button><button class="btn ghost-btn" onclick="closeAddTask()">Annuler</button><button class="btn" onclick="saveTask()">Enregistrer</button></div>
   </div>
 </div>
+<button class="zen-exit" onclick="toggleZen(false)">Quitter le mode ciblé</button>
 
 <nav class="bottom-nav" id="bottom-nav">
   <button class="nav-item" id="nav-timer" onclick="showScreen('timer')"><svg><use href="#i-timer"/></svg><span>Timer</span></button>

@@ -185,3 +185,25 @@ h1,h2,.brand,.digits,.stats b{font-family:var(--serif);font-weight:400}
 
 @media (min-width:600px){#app{margin:0;border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+/* v2.2 : tâches actives, feuille d'édition, mode ciblé */
+.hbtns{display:flex;gap:8px}
+.active-chip{display:none;margin-top:10px;padding:6px 14px;border-radius:999px;background:var(--surf);color:var(--mute);font-size:14px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.active-chip.on{display:block}.active-chip b{color:var(--ink)}
+.row{touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:transform .15s}
+.row.act{box-shadow:inset 3px 0 0 var(--moss);padding-left:12px}
+.row .more{width:32px;height:32px;color:var(--mute);font-size:22px;line-height:1;flex-shrink:0}
+.hint{font-size:13px;color:var(--mute);padding:10px 0 0}
+.name-inp{font:400 20px var(--serif);background:none;border:0;border-bottom:1.5px dashed var(--line);color:var(--ink);width:100%;padding:2px 0}
+.name-inp:focus{outline:none;border-color:var(--moss)}
+.sheet{max-height:92dvh;overflow-y:auto}
+.chips{flex-wrap:wrap}.preset-chip{padding:0 14px}
+.sub{display:flex;align-items:center;gap:4px;padding:6px 0}
+.sub .check{width:26px;height:26px;margin-right:6px}
+.sub span{flex:1;font-weight:600;overflow-wrap:anywhere}.sub span.off{text-decoration:line-through;color:var(--mute)}
+.sub .m{width:32px;height:32px;color:var(--mute)}.sub .m:disabled{opacity:.25}
+#sub-list+.inp{margin-top:6px}
+.cat-btn .x{margin-left:8px;opacity:.7}
+.zen-exit{display:none;position:fixed;top:max(16px,env(safe-area-inset-top));right:16px;z-index:150;padding:8px 14px;border-radius:999px;background:var(--surf);color:var(--mute);font-size:14px;font-weight:600}
+#app.zen .zen-exit{display:block}
+#app.zen .top,#app.zen .modes,#app.zen .pods-row,#app.zen .sec-h,#app.zen #timer-tasks,#app.zen #empty-tasks,#app.zen #notif-prompt,#app.zen .bottom-nav{display:none!important}
+#app.zen .stage{padding-top:12vh}

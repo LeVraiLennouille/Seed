@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'seed-v2.1';
+const CACHE_VERSION = 'seed-v2.2';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
