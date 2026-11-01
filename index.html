@@ -90,6 +90,10 @@
       <button class="go" id="play-btn" onclick="toggleTimer()"><svg id="play-icon"><use href="#i-play"/></svg><span id="play-label">Démarrer</span></button>
       <button class="ghost" onclick="skipTimer()" aria-label="Passer à la phase suivante"><svg><use href="#i-skip"/></svg></button>
     </div>
+    <div class="distract" id="distract">
+      <input class="inp" id="distract-input" placeholder="Pensée parasite ? Notez-la" maxlength="80" aria-label="Noter une distraction" onkeydown="if(event.key==='Enter'){addDistraction();event.preventDefault()}"/>
+      <button class="link" id="distract-count" onclick="openDistractions()">Distractions</button>
+    </div>
   </div>
   <div class="pods-row"><span>Aujourd'hui</span><div class="pods" id="streak-dots"></div></div>
   <div class="sec-h"><h2>Tâches en cours</h2><button class="link" onclick="showScreen('tasks')">Tout voir</button></div>
@@ -100,6 +104,7 @@
 <section id="tasks" class="screen hidden">
   <header class="top"><h1 class="title">Tâches</h1><button class="icon-btn" onclick="openAddTask()" aria-label="Nouvelle tâche"><svg><use href="#i-plus"/></svg></button></header>
   <div class="tabs2">
+    <button class="tasks-tab" id="ttab-today" onclick="switchTaskTab('today')">Aujourd'hui <b id="today-count">0</b></button>
     <button class="tasks-tab active" id="ttab-active" onclick="switchTaskTab('active')">En cours <b id="active-count">0</b></button>
     <button class="tasks-tab" id="ttab-done" onclick="switchTaskTab('done')">Terminées <b id="done-count">0</b></button>
   </div>
@@ -117,19 +122,31 @@
     <div><b id="tasks-done">0</b><span>tâches terminées</span></div>
   </div>
   <div class="block"><h2>Records</h2><div class="stats" id="records"></div></div>
-  <div class="block"><h2>Les 7 derniers jours</h2><div class="week" id="week-chart"></div></div>
-  <div class="block"><h2>Ce mois-ci</h2>
-    <div class="heat-labels"><i>L</i><i>M</i><i>M</i><i>J</i><i>V</i><i>S</i><i>D</i></div>
-    <div class="heatmap-grid" id="heatmap"></div>
+  <div class="block"><h2>Période</h2>
+    <div class="chips" id="chips-rep" style="margin-top:12px"></div>
+    <div class="pnav"><button onclick="repNav(-1)" aria-label="Période précédente">&lsaquo;</button><strong id="rep-label"></strong><button onclick="repNav(1)" id="rep-next" aria-label="Période suivante">&rsaquo;</button></div>
+    <div id="rep-chart"></div>
+    <div class="stats" id="rep-stats"></div>
   </div>
+  <div class="block"><h2>Temps par catégorie</h2><div id="rep-cats"></div></div>
+  <div class="block"><h2>Temps par tâche</h2><div id="rep-tasks"></div></div>
+  <div class="block"><h2>Dernières sessions</h2><div id="rep-log"></div></div>
+  <div class="block"><button class="btn ghost-btn" style="width:100%" onclick="exportCSV()">Exporter le journal (CSV)</button></div>
 </section>
 
 <section id="garden" class="screen hidden">
   <header class="top"><h1 class="title" id="garden-title">Votre jardin</h1></header>
   <div class="gplant" id="garden-plant"></div>
   <p class="gstage" id="garden-stage"></p>
+  <div class="harvest" id="harvest-box"></div>
   <h2 class="group">Espèces</h2>
   <div class="rows" id="species-list"></div>
+  <h2 class="group">Jours de repos</h2>
+  <p class="hint" id="rest-hint"></p>
+  <div class="rest-add"><input type="date" class="inp" id="rest-input" aria-label="Date du jour de repos"/><button class="btn sm" onclick="addRest()">Poser</button></div>
+  <div class="rows" id="rest-list"></div>
+  <h2 class="group">Collection</h2>
+  <div class="rows" id="collection-list"></div>
   <h2 class="group">Plantes fanées</h2>
   <div class="rows" id="forest-list"></div>
 </section>
@@ -156,6 +173,17 @@
     <div class="set-row"><div><strong>Session automatique</strong><small>Relance la concentration après une pause</small></div>
       <label class="tog"><input type="checkbox" id="auto-focus-toggle" onchange="saveSetting('autoFocus',this.checked)"/><i></i></label></div>
   </div>
+  <h2 class="group">Journée et rappel</h2>
+  <div class="set">
+    <div class="set-row"><div><strong>La journée commence à</strong><small>Une session avant cette heure compte pour la veille</small></div>
+      <div class="stepper"><button onclick="adjDayStart(-1)" aria-label="Plus tôt">&minus;</button><span id="daystart-val" style="min-width:48px">4 h</span><button onclick="adjDayStart(1)" aria-label="Plus tard">+</button></div></div>
+    <div class="set-row"><div><strong>Rappel de fin de journée</strong><small id="remind-status"></small></div>
+      <label class="tog"><input type="checkbox" id="remind-toggle" onchange="setRemind(this.checked)"/><i></i></label></div>
+    <div class="set-row"><div><strong>Heure du rappel</strong><small>Envoyé si la journée n'est pas validée</small></div>
+      <div class="stepper"><button onclick="adjRemind(-1)" aria-label="Plus tôt">&minus;</button><span id="remind-val" style="min-width:64px">20:00</span><button onclick="adjRemind(1)" aria-label="Plus tard">+</button></div></div>
+    <div class="set-row"><div><strong>Note de fin de session</strong><small>Demande ce que vous avez accompli</small></div>
+      <label class="tog"><input type="checkbox" id="note-toggle" checked onchange="saveSetting('askNote',this.checked)"/><i></i></label></div>
+  </div>
   <h2 class="group">Apparence</h2>
   <div class="set"><div class="set-row col"><span>Thème</span><div class="chips" id="chips-theme"></div></div></div>
   <h2 class="group">Sons et alertes</h2>
@@ -169,7 +197,7 @@
     <div class="set-row"><div><strong>Écran allumé</strong><small>Empêche la mise en veille</small></div>
       <label class="tog"><input type="checkbox" id="wake-toggle" onchange="toggleWakeLock(this)"/><i></i></label></div>
   </div>
-  <p class="foot">Seed v2.5</p>
+  <p class="foot">Seed v2.7</p>
 </section>
 
 <div id="install-banner">
@@ -189,13 +217,38 @@
     <div class="color-swatches" id="color-swatches"></div>
     <span class="input-label">Priorité</span>
     <div class="chips" id="prio-select"></div>
+    <span class="input-label">Échéance</span>
+    <div class="due-row"><input class="inp" type="date" id="due-input" aria-label="Échéance" onchange="ed.due=this.value||null"/><button class="preset-chip" onclick="clearDue()">Effacer</button></div>
+    <span class="input-label">Répétition</span>
+    <div class="chips" id="rec-select"></div>
+    <div class="set-row" style="border:0;padding-bottom:0"><div><strong>Pour aujourd'hui</strong><small>Apparaît dans l'onglet Aujourd'hui</small></div>
+      <label class="tog"><input type="checkbox" id="today-toggle" onchange="ed.today=this.checked"/><i></i></label></div>
     <div class="set-row" style="border:0;padding-bottom:0"><div><strong>Pomodoros estimés</strong><small>0 : pas d'estimation</small></div><div class="stepper"><button onclick="adjEst(-1)" aria-label="Moins">&minus;</button><span id="est-val">0</span><button onclick="adjEst(1)" aria-label="Plus">+</button></div></div>
     <span class="input-label">Sous-tâches</span>
     <div id="sub-list"></div>
     <input class="inp" id="sub-input" placeholder="Ajouter une sous-tâche" maxlength="60" onkeydown="if(event.key==='Enter'){addSub();event.preventDefault()}"/>
+    <div id="notes-list"></div>
     <div class="row-btns"><button class="btn ghost-btn" id="del-btn" onclick="deleteEditing()">Supprimer</button><button class="btn ghost-btn" onclick="closeAddTask()">Annuler</button><button class="btn" onclick="saveTask()">Enregistrer</button></div>
   </div>
 </div>
+<div class="modal-overlay" id="note-modal" onclick="if(event.target===this)skipNote()">
+  <div class="sheet" role="dialog" aria-label="Fin de session">
+    <h2>Session terminée</h2>
+    <p class="hint" id="note-ctx" style="padding:0 0 12px"></p>
+    <label class="input-label" for="note-input">Qu'avez-vous accompli ?</label>
+    <textarea class="inp" id="note-input" rows="3" maxlength="240" placeholder="Une phrase suffit"></textarea>
+    <div class="row-btns"><button class="btn ghost-btn" onclick="skipNote()">Passer</button><button class="btn" onclick="saveNote()">Enregistrer</button></div>
+  </div>
+</div>
+<div class="modal-overlay" id="dist-modal" onclick="if(event.target===this)closeDistractions()">
+  <div class="sheet" role="dialog" aria-label="Distractions">
+    <h2>Distractions</h2>
+    <p class="hint" style="padding:0 0 8px">Notées pendant les sessions. Transformez-les en tâches ou supprimez-les.</p>
+    <div id="dist-list"></div>
+    <div class="row-btns"><button class="btn ghost-btn" onclick="clearDistractions()">Tout effacer</button><button class="btn" onclick="closeDistractions()">Fermer</button></div>
+  </div>
+</div>
+<div id="fx" aria-hidden="true"></div>
 <button class="zen-exit" onclick="toggleZen(false)">Quitter le mode ciblé</button>
 
 <nav class="bottom-nav" id="bottom-nav">

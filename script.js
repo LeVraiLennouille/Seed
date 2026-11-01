@@ -41,12 +41,18 @@ const SPECIES = [
   { id: 'apple', name: 'Pommier', leaf: '#4E9A63', fruit: '#D9363E', blossom: '#F8E1EA', need: null },
   { id: 'cherry', name: 'Cerisier', leaf: '#6BAA75', fruit: '#A5122D', blossom: '#F6B8CC', need: ['streak', 30] },
   { id: 'orange', name: 'Oranger', leaf: '#3F8A55', fruit: '#F29A24', blossom: '#FFFFFF', need: ['streak', 100] },
-  { id: 'lemon', name: 'Citronnier', leaf: '#5FA648', fruit: '#F2D624', blossom: '#FFFFFF', need: ['streak', 200] }
+  { id: 'lemon', name: 'Citronnier', leaf: '#5FA648', fruit: '#F2D624', blossom: '#FFFFFF', need: ['streak', 200] },
+  { id: 'plum', name: 'Prunier', leaf: '#5B8F6E', fruit: '#5B3A8C', blossom: '#F3E3F7', need: ['harvest', 1] },
+  { id: 'peach', name: 'Pêcher', leaf: '#7DB56A', fruit: '#F4A27E', blossom: '#FBC9D6', need: ['harvest', 2] }
 ];
+const HEAL_EVERY = 5;       // jours validés pour qu'une feuille fanée repousse
+const REST_PER_MONTH = 2;   // jours de repos posables par mois
+const PUSH_SERVER = '';     // URL du serveur de rappels, ex. 'https://seed-push.example.com' (voir push-server/README.md)
 const progress = k => ({
   streak: Math.max(state.timer.bestStreak || 0, state.timer.streakDays || 0),
   sessions: state.timer.totalSessions,
-  goal: Object.values(state.history).filter(n => n >= state.timer.goal).length
+  goal: Object.values(state.history).filter(n => n >= state.timer.goal).length,
+  harvest: (state.collection || []).length
 })[k];
 const meets = sp => !sp.need || progress(sp.need[0]) >= sp.need[1];
 
@@ -72,6 +78,15 @@ function migrate() {
   state.dead = state.dead || null;
   state.wilted = state.wilted || 0;
   state.forest = state.forest || [];
+  state.dayStart ??= 4;
+  state.log = state.log || [];
+  state.rest = state.rest || [];
+  state.collection = state.collection || [];
+  state.distractions = state.distractions || [];
+  state.remind = state.remind || { on: false, at: 1200, push: false };
+  state.heal = state.heal || 0;
+  t.askNote ??= true;
+  state.tasks.forEach(k => { k.due ??= null; k.rec ??= null; k.plan ??= null; k.notes = k.notes || []; });
   const had = state.unlocked || [];
   state.unlocked = SPECIES.filter(sp => meets(sp) || had.includes(sp.id)).map(s => s.id);
 }
@@ -97,6 +112,7 @@ function init() {
   renderGarden();
   updateTimerDisplay();
   resumeTimer();
+  if (state.remind.on) { syncPush(); scheduleLocalReminder(); }
 }
 
 const MODE_LABELS = { focus:'Concentration', short:'Pause courte', long:'Pause longue' };
@@ -106,9 +122,11 @@ function applyModeUI() {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.id === 'tab-' + mode));
   document.getElementById('timer-mode-label').textContent = MODE_LABELS[mode];
   updatePlayIcon(false);
+  renderDistract();
 }
 
 function showRaw(id) {
+  const fxl = document.getElementById('fx'); if (fxl) fxl.replaceChildren();
   document.querySelectorAll('.screen').forEach(s => {
     s.classList.add('hidden');
     s.classList.remove('slide-left');
@@ -173,28 +191,39 @@ function switchMode(mode, btn, force) {
   save();
 }
 
-// --- Dates locales (clé AAAA-MM-JJ) ---
+// --- Dates : clé AAAA-MM-JJ du « jour logique » (la journée commence à state.dayStart) ---
+const calKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
 function localDateKey(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return calKey(new Date(d.getTime() - (state.dayStart ?? 4) * 3600000));
 }
 
 function shiftDay(key, n) {
   const [y, m, d] = key.split('-').map(Number);
-  return localDateKey(new Date(y, m - 1, d + n));
+  return calKey(new Date(y, m - 1, d + n));
 }
 
-// Nouveau jour : remet à zéro les sessions du jour, et la série si un jour a été manqué
+// Instant où le jour logique en cours se termine
+function dayEndsAt(now = Date.now()) {
+  const ds = state.dayStart ?? 4, x = new Date(now - ds * 3600000);
+  return new Date(x.getFullYear(), x.getMonth(), x.getDate() + 1).getTime() + ds * 3600000;
+}
+
+// Nouveau jour : remet à zéro les sessions du jour ; chaque jour entièrement raté fait faner
+// une feuille, sauf les jours de repos posés à l'avance
 function refreshDaily() {
   const t = state.timer, today = localDateKey();
   if (t.lastDate && t.lastDate !== today) t.sessions = 0;
+  state.rest = state.rest.filter(k => k >= shiftDay(today, -90));
   if (!t.lastDate || t.streakDays <= 0) return;
-  let k = shiftDay(t.accounted || t.lastDate, 1), n = 0;
-  while (k < today && n < 400) { n++; k = shiftDay(k, 1); }
-  if (!n) return;
+  let k = shiftDay(t.accounted || t.lastDate, 1), n = 0, r = 0, g = 0;
+  while (k < today && g++ < 400) { if (state.rest.includes(k)) r++; else n++; k = shiftDay(k, 1); }
+  if (!n && !r) return;
   t.accounted = shiftDay(today, -1);
+  if (!n) { showToast('Jour de repos : aucune feuille n\'a fané', 4000); return; }
   state.wilted += n;
   if (state.wilted > leafCap()) { witherPlant(); showToast('Votre arbre a fané… une nouvelle graine vous attend', 5000); }
-  else showToast(n > 1 ? `${n} feuilles ont fané` : 'Une feuille a fané', 4000);
+  else { showToast(n > 1 ? `${n} feuilles ont fané` : 'Une feuille a fané', 4000); leafFall(n); }
 }
 
 // --- Timer basé sur une heure de fin absolue (endTime) ---
@@ -376,8 +405,37 @@ const PRIO = { high: 0, normal: 1, low: 2 };
 const PRIO_LABELS = [['high', 'Urgente'], ['normal', 'Normale'], ['low', 'Faible']];
 let ed = null, gestureAt = 0;
 const pomoLabel = t => t.est ? `${t.spent}/${t.est} 🌱` : `${t.spent} 🌱`;
-const activeList = () => state.tasks.filter(t => !t.done)
-  .sort((a, b) => (b.id === state.activeTask) - (a.id === state.activeTask) || PRIO[a.priority] - PRIO[b.priority]);
+const REC_LABELS = { daily: 'chaque jour', weekly: 'chaque semaine', monthly: 'chaque mois' };
+const isToday = t => t.plan === localDateKey() || (!!t.due && t.due <= localDateKey());
+const taskCmp = (a, b) => ((b.id === state.activeTask) - (a.id === state.activeTask))
+  || (isToday(b) - isToday(a))
+  || PRIO[a.priority] - PRIO[b.priority]
+  || (a.due || '9999').localeCompare(b.due || '9999');
+const activeList = () => state.tasks.filter(t => !t.done).sort(taskCmp);
+
+function dueInfo(t) {
+  if (!t.due) return null;
+  const today = localDateKey(), diff = Math.round((new Date(t.due + 'T12:00') - new Date(today + 'T12:00')) / 864e5);
+  if (diff < 0) return { late: true, txt: diff === -1 ? 'en retard depuis hier' : `en retard de ${-diff} j` };
+  if (diff === 0) return { txt: "échéance aujourd'hui" };
+  if (diff === 1) return { txt: 'échéance demain' };
+  if (diff < 7) return { txt: 'échéance ' + new Date(t.due + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long' }) };
+  return { txt: 'échéance le ' + new Date(t.due + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) };
+}
+
+function addMonth(key) {
+  const [y, m, d] = key.split('-').map(Number), last = new Date(y, m + 1, 0).getDate();
+  return calKey(new Date(y, m, Math.min(d, last)));
+}
+
+// Prochaine échéance d'une tâche récurrente : à partir de l'échéance si elle est atteinte, sinon d'aujourd'hui
+function nextDue(t) {
+  const today = localDateKey();
+  const step = k => t.rec === 'daily' ? shiftDay(k, 1) : t.rec === 'weekly' ? shiftDay(k, 7) : addMonth(k);
+  let k = t.due && t.due <= today ? t.due : today, g = 0;
+  do { k = step(k); } while (k <= today && ++g < 400);
+  return k;
+}
 
 function renderTimerTasks() {
   const list = activeList().slice(0, 3);
@@ -394,11 +452,12 @@ function renderActiveChip() {
 }
 
 function renderTasks() {
-  const active = activeList(), done = state.tasks.filter(t => t.done);
+  const active = activeList(), today = active.filter(isToday), done = state.tasks.filter(t => t.done);
+  document.getElementById('today-count').textContent = today.length;
   document.getElementById('active-count').textContent = active.length;
   document.getElementById('done-count').textContent = done.length;
-  const list = taskTab === 'active' ? active : done;
-  const emptyText = taskTab === 'active' ? 'Tout est fait. Ajoutez une tâche pour la prochaine session.' : 'Aucune tâche terminée pour le moment.';
+  const list = taskTab === 'today' ? today : taskTab === 'active' ? active : done;
+  const emptyText = { today: "Rien de prévu pour aujourd'hui. Planifiez une tâche ou donnez-lui une échéance.", active: 'Tout est fait. Ajoutez une tâche pour la prochaine session.', done: 'Aucune tâche terminée pour le moment.' }[taskTab];
   document.getElementById('tasks-list').innerHTML = list.length ? list.map(taskHTML).join('') : `<div class="empty"><p>${emptyText}</p></div>`;
 }
 
@@ -407,6 +466,9 @@ function taskHTML(t) {
   const bits = [esc(t.cat)];
   if (n) bits.push(`${d}/${n} sous-tâches`);
   if (t.est || t.spent) bits.push(pomoLabel(t));
+  const du = !t.done && dueInfo(t);
+  if (du) bits.push(du.late ? `<em>${du.txt}</em>` : du.txt);
+  if (t.rec) bits.push('↻ ' + REC_LABELS[t.rec]);
   const flag = t.priority === 'high' ? ' · <em>Urgent</em>' : t.priority === 'low' && !t.done ? ' · faible' : '';
   return `<div class="row${t.id === state.activeTask ? ' act' : ''}" data-id="${t.id}" onclick="rowTap(${t.id})">
     <span class="dot" style="background:${t.color}"></span>
@@ -460,7 +522,16 @@ function toggleTask(id) {
   const t = state.tasks.find(t => t.id === id);
   if (!t) return;
   t.done = !t.done;
-  if (t.done) { t.subs.forEach(s => s.d = true); if (state.activeTask === id) state.activeTask = null; }
+  if (t.done) {
+    t.subs.forEach(s => s.d = true);
+    if (state.activeTask === id) state.activeTask = null;
+    if (t.rec && !t.spawned) {   // la tâche récurrente réapparaît à sa prochaine échéance
+      const nd = nextDue(t);
+      state.tasks.unshift({ ...t, id: Date.now(), done: false, spent: 0, due: nd, plan: null, spawned: false, notes: [], subs: t.subs.map(s => ({ ...s, d: false })) });
+      t.spawned = true;
+      showToast('Prochaine occurrence : ' + new Date(nd + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' }), 3500);
+    }
+  }
   save(); renderTasks(); renderTimerTasks();
 }
 
@@ -474,17 +545,17 @@ function deleteTask(id) {
 
 function switchTaskTab(tab) {
   taskTab = tab;
-  document.getElementById('ttab-active').classList.toggle('active', tab === 'active');
-  document.getElementById('ttab-done').classList.toggle('active', tab === 'done');
+  ['today', 'active', 'done'].forEach(k => document.getElementById('ttab-' + k).classList.toggle('active', tab === k));
   renderTasks();
 }
 
 // --- Feuille de création / édition ---
-function openAddTask() { openSheet({ id: null, title: '', cat: state.cats[0], color: COLORS[0], priority: 'normal', est: 0, subs: [] }); }
+function openAddTask() { openSheet({ id: null, title: '', cat: state.cats[0], color: COLORS[0], priority: 'normal', est: 0, subs: [], due: null, rec: null, today: false, notes: [] }); }
 
 function openEditTask(id) {
   const t = state.tasks.find(k => k.id === id); if (!t) return;
-  openSheet({ id, title: t.title, cat: t.cat, color: t.color, priority: t.priority, est: t.est, subs: t.subs.map(s => ({ ...s })) });
+  openSheet({ id, title: t.title, cat: t.cat, color: t.color, priority: t.priority, est: t.est, subs: t.subs.map(s => ({ ...s })),
+    due: t.due, rec: t.rec, today: t.plan === localDateKey(), notes: t.notes.map(n => ({ ...n })) });
 }
 
 function openSheet(d) {
@@ -492,23 +563,32 @@ function openSheet(d) {
   document.getElementById('sheet-title').textContent = d.id ? 'Modifier la tâche' : 'Nouvelle tâche';
   document.getElementById('task-input').value = d.title;
   document.getElementById('sub-input').value = '';
+  document.getElementById('due-input').value = d.due || '';
+  document.getElementById('today-toggle').checked = !!d.today;
   document.getElementById('del-btn').style.display = d.id ? '' : 'none';
   renderSheet();
   document.getElementById('add-task-modal').classList.add('open');
   if (!d.id) setTimeout(() => document.getElementById('task-input').focus(), 300);
 }
 
+function clearDue() { ed.due = null; document.getElementById('due-input').value = ''; }
+
 function renderSheet() {
   document.getElementById('color-swatches').innerHTML = COLORS.map(c => `<div class="swatch${c === ed.color ? ' selected' : ''}" style="background:${c}" onclick="ed.color='${c}';renderSheet()"></div>`).join('');
   document.getElementById('cat-select').innerHTML = state.cats.map((c, i) => `<button class="cat-btn${c === ed.cat ? ' active' : ''}" onclick="ed.cat=state.cats[${i}];renderSheet()">${esc(c)}${c === ed.cat && state.cats.length > 1 ? `<span class="x" onclick="event.stopPropagation();delCat(${i})" aria-label="Supprimer la catégorie">×</span>` : ''}</button>`).join('') + '<button class="cat-btn" onclick="addCat()">+ Catégorie</button>';
   document.getElementById('prio-select').innerHTML = PRIO_LABELS.map(([v, l]) => `<button class="preset-chip${v === ed.priority ? ' active' : ''}" onclick="ed.priority='${v}';renderSheet()">${l}</button>`).join('');
   document.getElementById('est-val').textContent = ed.est;
+  document.getElementById('rec-select').innerHTML = [['', 'Aucune'], ['daily', 'Chaque jour'], ['weekly', 'Chaque semaine'], ['monthly', 'Chaque mois']]
+    .map(([v, l]) => `<button class="preset-chip${(ed.rec || '') === v ? ' active' : ''}" onclick="ed.rec=${v ? `'${v}'` : 'null'};renderSheet()">${l}</button>`).join('');
   document.getElementById('sub-list').innerHTML = ed.subs.map((s, i) => `<div class="sub">
     <button class="check${s.d ? ' done' : ''}" onclick="ed.subs[${i}].d=!ed.subs[${i}].d;renderSheet()" aria-label="Cocher"><svg><use href="#i-check"/></svg></button>
     <span class="${s.d ? 'off' : ''}">${esc(s.t)}</span>
     <button class="m" onclick="moveSub(${i},-1)" ${i === 0 ? 'disabled' : ''} aria-label="Monter">▲</button>
     <button class="m" onclick="moveSub(${i},1)" ${i === ed.subs.length - 1 ? 'disabled' : ''} aria-label="Descendre">▼</button>
     <button class="m" onclick="ed.subs.splice(${i},1);renderSheet()" aria-label="Supprimer">✕</button></div>`).join('');
+  document.getElementById('notes-list').innerHTML = ed.notes.length
+    ? '<span class="input-label">Notes de session</span>' + ed.notes.map((n, i) => `<div class="nt"><span><small>${new Date(n.t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</small>${esc(n.n)}</span><button class="m" onclick="ed.notes.splice(${i},1);renderSheet()" aria-label="Supprimer la note">✕</button></div>`).reverse().join('')
+    : '';
 }
 
 function addSub() {
@@ -534,7 +614,10 @@ function saveTask() {
   const title = document.getElementById('task-input').value.trim();
   if (!title) { document.getElementById('task-input').focus(); return; }
   if (document.getElementById('sub-input').value.trim()) addSub();
-  const data = { title, cat: ed.cat, color: ed.color, priority: ed.priority, est: ed.est, subs: ed.subs };
+  ed.due = document.getElementById('due-input').value || null;
+  if (ed.rec && !ed.due) ed.due = localDateKey();
+  const data = { title, cat: ed.cat, color: ed.color, priority: ed.priority, est: ed.est, subs: ed.subs,
+    due: ed.due, rec: ed.rec, plan: ed.today ? localDateKey() : null, notes: ed.notes };
   const cur = ed.id && state.tasks.find(k => k.id === ed.id);
   if (cur) Object.assign(cur, data);
   else state.tasks.unshift({ id: Date.now(), done: false, spent: 0, ...data });
@@ -550,7 +633,7 @@ function renderSettings() {
   const t = state.timer;
   ['focus', 'short', 'long'].forEach(renderStepper);
   document.getElementById('goal-val').textContent = t.goal;
-  [['sound-toggle', 'sound'], ['haptic-toggle', 'haptic'], ['auto-break-toggle', 'autoBreak'], ['auto-focus-toggle', 'autoFocus']]
+  [['sound-toggle', 'sound'], ['haptic-toggle', 'haptic'], ['auto-break-toggle', 'autoBreak'], ['auto-focus-toggle', 'autoFocus'], ['note-toggle', 'askNote']]
     .forEach(([id, k]) => document.getElementById(id).checked = !!t[k]);
   renderOpts('chips-theme', [['auto', 'Auto'], ['light', 'Clair'], ['dark', 'Sombre']], state.theme, 'setTheme');
   renderOpts('chips-sound', [['soft', 'Doux'], ['chime', 'Carillon'], ['beep', 'Bip']], t.soundKind, 'setSoundKind');
@@ -559,6 +642,7 @@ function renderSettings() {
   document.getElementById('prof-tasks').textContent = state.tasks.length;
   document.getElementById('prof-sessions').textContent = t.totalSessions;
   document.getElementById('prof-mins').textContent = t.totalMinutes;
+  renderRemind();
 }
 
 function renderOpts(id, opts, cur, fn) {
@@ -612,8 +696,8 @@ function renderReports() {
   document.getElementById('streak-days').textContent = state.timer.streakDays;
   document.getElementById('tasks-done').textContent = state.tasks.filter(t => t.done).length;
   renderRecords();
-  renderWeekChart();
-  renderHeatmap();
+  renderPeriod();
+  renderLog();
 }
 
 function renderRecords() {
@@ -636,36 +720,97 @@ function renderRecords() {
   document.getElementById('records').innerHTML = cells.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
 }
 
-function renderWeekChart() {
-  const now = new Date();
-  const data = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now); d.setDate(d.getDate() - i);
-    const key = localDateKey(d);
-    data.push({ label: d.toLocaleDateString('fr-FR', { weekday: 'narrow' }).toUpperCase(), val: state.history[key] || 0 });
+// --- Période : navigation semaine / mois ---
+let rep = { mode: 'week', off: 0 };
+const fmtMin = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' ' + String(m % 60).padStart(2, '0') : ''}`;
+const dFmt = (k, o) => new Date(k + 'T12:00').toLocaleDateString('fr-FR', o);
+
+function repRange() {
+  const today = localDateKey();
+  if (rep.mode === 'week') {
+    const [y, m, d] = today.split('-').map(Number), dow = (new Date(y, m - 1, d).getDay() + 6) % 7;
+    const from = shiftDay(today, -dow + rep.off * 7);
+    return { from, to: shiftDay(from, 6), days: 7 };
   }
-  const max = Math.max(...data.map(d => d.val), 1);
-  document.getElementById('week-chart').innerHTML = data.map(d => `
-    <div class="wk"><b>${d.val}</b><i class="${d.val?'':'zero'}" style="height:${Math.round(d.val/max*100)}px"></i><span>${d.label}</span></div>`).join('');
+  const [y, m] = today.split('-').map(Number);
+  return { from: calKey(new Date(y, m - 1 + rep.off, 1)), to: calKey(new Date(y, m + rep.off, 0)), days: new Date(y, m + rep.off, 0).getDate() };
+}
+function repNav(d) { if (rep.off + d > 0) return; rep.off += d; renderPeriod(); }
+function setRepMode(m) { rep = { mode: m, off: 0 }; renderPeriod(); }
+
+function renderPeriod() {
+  const r = repRange(), h = state.history, inR = k => k >= r.from && k <= r.to;
+  renderOpts('chips-rep', [['week', 'Semaine'], ['month', 'Mois']], rep.mode, 'setRepMode');
+  const label = rep.mode === 'week' ? `${dFmt(r.from, { day: 'numeric', month: 'short' })} – ${dFmt(r.to, { day: 'numeric', month: 'short' })}` : dFmt(r.from, { month: 'long', year: 'numeric' });
+  document.getElementById('rep-label').textContent = label.charAt(0).toUpperCase() + label.slice(1);
+  document.getElementById('rep-next').disabled = rep.off >= 0;
+
+  const days = Array.from({ length: r.days }, (_, i) => shiftDay(r.from, i));
+  const lg = {};
+  state.log.filter(e => inR(e.d)).forEach(e => { const o = lg[e.d] || (lg[e.d] = { n: 0, m: 0 }); o.n++; o.m += e.m; });
+  let sessions = 0, minutes = 0, active = 0;
+  days.forEach(k => {
+    const n = h[k] || 0, l = lg[k] || { n: 0, m: 0 };
+    sessions += n; if (n) active++;
+    minutes += l.m + Math.max(0, n - l.n) * state.timer.durations.focus;   // sessions sans détail : durée actuelle
+  });
+
+  if (rep.mode === 'week') {
+    const max = Math.max(...days.map(k => h[k] || 0), 1);
+    document.getElementById('rep-chart').innerHTML = '<div class="week">' + days.map(k => {
+      const v = h[k] || 0;
+      return `<div class="wk"><b>${v}</b><i class="${v ? '' : 'zero'}" style="height:${Math.round(v / max * 100)}px"></i><span>${dFmt(k, { weekday: 'narrow' }).toUpperCase()}</span></div>`;
+    }).join('') + '</div>';
+  } else {
+    const lead = (new Date(r.from + 'T12:00').getDay() + 6) % 7, max = Math.max(...days.map(k => h[k] || 0), 1);
+    document.getElementById('rep-chart').innerHTML = '<div class="heat-labels"><i>L</i><i>M</i><i>M</i><i>J</i><i>V</i><i>S</i><i>D</i></div><div class="heatmap-grid">'
+      + Array(lead).fill('<div class="heat-cell" style="visibility:hidden"></div>').join('')
+      + days.map(k => {
+        const n = h[k] || 0, q = n / max, lvl = !n ? '' : q < .25 ? 'h1' : q < .5 ? 'h2' : q < .75 ? 'h3' : 'h4';
+        return `<div class="heat-cell ${lvl}" title="${dFmt(k, { day: 'numeric', month: 'short' })} : ${n} session${n > 1 ? 's' : ''}"></div>`;
+      }).join('') + '</div>';
+  }
+  const ratio = active ? sessions / active : 0, s1 = n => n > 1 ? 's' : '';
+  const cells = [[sessions, 'session' + s1(sessions)], [fmtMin(minutes), 'de concentration'], [active, 'jour' + s1(active) + ' actif' + s1(active)], [ratio.toFixed(1).replace('.', ','), 'session' + (ratio >= 2 ? 's' : '') + ' par jour actif']];
+  document.getElementById('rep-stats').innerHTML = cells.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
+
+  // Temps par catégorie et par tâche, d'après le journal détaillé
+  const es = state.log.filter(e => inR(e.d)), cats = {}, tasks = {};
+  es.forEach(e => {
+    const cn = e.cat || 'Sans tâche', c = cats[cn] || (cats[cn] = { m: 0, c: e.c });
+    c.m += e.m; if (e.c) c.c = e.c;
+    const tk = e.task ?? 'none', o = tasks[tk] || (tasks[tk] = { name: e.tt || 'Sans tâche', m: 0, c: e.c });
+    o.m += e.m;
+  });
+  const bars = (list, empty) => {
+    if (!list.length) return `<div class="empty"><p>${empty}</p></div>`;
+    const max = Math.max(...list.map(x => x.m));
+    return list.map(x => `<div class="brk"><span class="nm">${esc(x.name)}</span><span class="v">${fmtMin(x.m)}</span><div class="bb"><i style="width:${Math.round(x.m / max * 100)}%;background:${x.c || 'var(--moss)'}"></i></div></div>`).join('');
+  };
+  const none = 'Pas de détail sur cette période. Il est enregistré à chaque session depuis la v2.6.';
+  document.getElementById('rep-cats').innerHTML = bars(Object.entries(cats).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.m - a.m), none);
+  document.getElementById('rep-tasks').innerHTML = bars(Object.values(tasks).sort((a, b) => b.m - a.m).slice(0, 8), none);
 }
 
-function renderHeatmap() {
-  const now = new Date();
-  const year = now.getFullYear(), month = now.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month+1, 0).getDate();
-  const offset = (firstDay + 6) % 7;
-  let cells = Array(offset).fill(null);
-  for (let d = 1; d <= daysInMonth; d++) {
-    const key = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    cells.push({ d, n: state.history[key]||0 });
-  }
-  const maxN = Math.max(...cells.filter(Boolean).map(c=>c.n), 1);
-  document.getElementById('heatmap').innerHTML = cells.map(c=>{
-    if (!c) return '<div class="heat-cell" style="visibility:hidden"></div>';
-    const lvl = c.n===0?'':c.n/maxN<0.25?'h1':c.n/maxN<0.5?'h2':c.n/maxN<0.75?'h3':'h4';
-    return `<div class="heat-cell ${lvl}" title="${c.d}: ${c.n} sessions"></div>`;
-  }).join('');
+function renderLog() {
+  const last = state.log.slice(-8).reverse();
+  document.getElementById('rep-log').innerHTML = last.length ? last.map(e => {
+    const d = new Date(e.t);
+    return `<div class="lg"><b>${esc(e.tt || 'Sans tâche')}</b><small>${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} · ${e.m} min${e.cat ? ' · ' + esc(e.cat) : ''}</small>${e.n ? `<p>${esc(e.n)}</p>` : ''}</div>`;
+  }).join('') : '<div class="empty"><p>Les sessions terminées apparaîtront ici, avec leur note.</p></div>';
+}
+
+// Export du journal : séparateur « ; » et BOM pour Excel, protection contre l'injection de formules
+function exportCSV() {
+  if (!state.log.length) { showToast('Aucune session dans le journal'); return; }
+  const q = v => { let x = String(v ?? ''); if (/^[=+\-@\t\r]/.test(x)) x = "'" + x; return '"' + x.replace(/"/g, '""') + '"'; };
+  const rows = [['date', 'heure', 'duree_min', 'tache', 'categorie', 'note']]
+    .concat(state.log.map(e => [e.d, new Date(e.t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }), e.m, e.tt, e.cat, e.n]));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + rows.map(r => r.map(q).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = `seed-journal-${localDateKey()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -780,11 +925,11 @@ function requestNotifPermission() {
   });
 }
 
-function sendNotification(title, body) {
+function sendNotification(title, body, tag) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   try {
     new Notification(title, {
-      body,
+      body, tag,
       icon: './assets/icon-192.png',
       badge: './assets/icon-192.png',
       vibrate: [200, 100, 200],
@@ -794,7 +939,7 @@ function sendNotification(title, body) {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then(reg => {
         reg.showNotification(title, {
-          body,
+          body, tag,
           icon: './assets/icon-192.png',
           badge: './assets/icon-192.png',
           vibrate: [200, 100, 200]
@@ -810,7 +955,10 @@ document.addEventListener('visibilitychange', () => {
   renderStreakDots();
   renderSessionCount();
   renderReports();
+  renderGarden();
   updateTimerDisplay();
+  syncPush();
+  scheduleLocalReminder();
   if (state.timer.running) tick();
 });
 
@@ -834,7 +982,7 @@ function witherPlant() {
     state.dead = { days: t.streakDays, sp: state.species };
     state.forest.push({ days: t.streakDays, sp: state.species, d: localDateKey() });
   }
-  t.streakDays = 0; t.accounted = null; state.wilted = 0;
+  t.streakDays = 0; t.accounted = null; state.wilted = 0; state.heal = 0;
 }
 
 function treeInner(sp, d, w, wl = 0, cap = 1) {
@@ -891,25 +1039,255 @@ function renderPlant(p) {
 
 function setSpecies(id) { state.species = id; save(); updateTimerDisplay(); renderGarden(); }
 
+const canHarvest = () => !state.dead && state.timer.streakDays >= 365;
+
+function harvestTree() {
+  if (!canHarvest() || !confirm('Récolter l\'arbre ? Il rejoint votre collection et une nouvelle graine est plantée.')) return;
+  const t = state.timer;
+  state.collection.push({ sp: state.species, days: t.streakDays, d: localDateKey() });
+  t.streakDays = 0; t.accounted = null; state.wilted = 0; state.heal = 0; state.dead = null;
+  const fresh = checkUnlocks();
+  save(); syncPush();
+  showToast(fresh.length ? 'Récolte ! Nouvelle espèce : ' + fresh.map(s => s.name).join(', ') : 'Arbre récolté. Choisissez l\'espèce de la prochaine graine.', 5000);
+  renderGarden(); updateTimerDisplay(); renderReports();
+}
+
+// --- Jours de repos : posés à l'avance, ils ne font pas faner de feuille ---
+const restIn = mk => state.rest.filter(k => k.slice(0, 7) === mk).length;
+
+function addRest() {
+  const el = document.getElementById('rest-input'), v = el.value, today = localDateKey();
+  if (!v) return;
+  if (v <= today) { showToast('Posez un jour de repos à l\'avance, à partir de demain', 3500); return; }
+  if (state.rest.includes(v)) { showToast('Ce jour est déjà posé'); return; }
+  if (restIn(v.slice(0, 7)) >= REST_PER_MONTH) { showToast(`Déjà ${REST_PER_MONTH} jours de repos ce mois-là`, 3500); return; }
+  state.rest.push(v); state.rest.sort(); el.value = '';
+  save(); renderGarden(); syncPush(); showToast('Jour de repos posé');
+}
+function delRest(k) {
+  if (k <= localDateKey()) return;
+  state.rest = state.rest.filter(x => x !== k);
+  save(); renderGarden(); syncPush();
+}
+
 function renderGarden() {
   const d = state.dead ? state.dead.days : state.timer.streakDays, wilt = !!state.dead, sp = speciesOf(state.species);
   const i = STAGES.reduce((a, [n], k) => d >= n ? k : a, 0), nxt = STAGES[i + 1], left = nxt ? nxt[0] - d : 0;
+  const wl = state.wilted, cap = leafCap(), pl = n => n > 1 ? 's' : '', toHeal = HEAL_EVERY - state.heal;
   document.getElementById('garden-title').textContent = state.name;
-  const wl = state.wilted, cap = leafCap(), pl = n => n > 1 ? 's' : '';
-  document.getElementById('garden-plant').innerHTML = treeSVG(sp, d, wilt, state.wilted, leafCap());
+  document.getElementById('garden-plant').innerHTML = treeSVG(sp, d, wilt, wl, cap);
+  const health = wl
+    ? (cap - wl > 0 ? `${wl} feuille${pl(wl)} fanée${pl(wl)}. L'arbre peut en perdre ${cap - wl} de plus.` : `${wl} feuilles fanées. Une de plus et l'arbre fane.`)
+      + ` Une feuille repousse dans ${toHeal} jour${pl(toHeal)} validé${pl(toHeal)}.`
+    : 'Toutes les feuilles sont en bonne santé.';
   document.getElementById('garden-stage').innerHTML = wilt
     ? `<b>Plante fanée</b>Elle avait atteint le stade « ${STAGES[i][1]} ». Terminez une session pour planter une nouvelle graine.`
-    : `<b>${STAGES[i][1]}</b>${nxt ? `Prochaine étape dans ${left} jour${pl(left)}.` : 'Forme finale atteinte.'}<br>${wl ? (cap - wl > 0 ? `${wl} feuille${pl(wl)} fanée${pl(wl)}. L'arbre peut en perdre ${cap - wl} de plus.` : `${wl} feuilles fanées. Une de plus et l'arbre fane.`) : 'Toutes les feuilles sont en bonne santé.'}`;
+    : `<b>${STAGES[i][1]}</b>${nxt ? `Prochaine étape dans ${left} jour${pl(left)}.` : 'Forme finale atteinte : vous pouvez la récolter.'}<br>${health}`;
+  document.getElementById('harvest-box').innerHTML = canHarvest() ? '<button class="btn" onclick="harvestTree()">Récolter l\'arbre</button>' : '';
+
   document.getElementById('species-list').innerHTML = SPECIES.map(s => {
     const ok = state.unlocked.includes(s.id), cur = s.id === state.species;
-    const need = s.need ? `Série de ${s.need[1]} jours` : 'Disponible dès le départ';
-    const meta = ok ? (cur ? 'Espèce actuelle' : need) : `🔒 ${need} · ${Math.min(progress('streak'), s.need[1])}/${s.need[1]}`;
+    const need = !s.need ? 'Disponible dès le départ' : s.need[0] === 'harvest' ? `${s.need[1]} arbre${pl(s.need[1])} récolté${pl(s.need[1])}` : `Série de ${s.need[1]} jours`;
+    const meta = ok ? (cur ? 'Espèce actuelle' : need) : `🔒 ${need} · ${Math.min(progress(s.need[0]), s.need[1])}/${s.need[1]}`;
     return `<div class="row${cur ? ' act' : ''}${ok ? '' : ' lock'}"${ok ? ` onclick="setSpecies('${s.id}')"` : ''}><div class="sp-ico">${treeSVG(s, 365, false)}</div><div class="info"><div class="name">${s.name}</div><div class="meta">${meta}</div></div></div>`;
   }).join('');
+
+  const today = localDateKey(), up = state.rest.filter(k => k > today), mk = today.slice(0, 7);
+  document.getElementById('rest-hint').textContent = `${REST_PER_MONTH} jours de repos par mois, à poser au moins un jour à l'avance : aucune feuille ne fane ces jours-là. Ce mois-ci : ${restIn(mk)}/${REST_PER_MONTH}.`;
+  document.getElementById('rest-input').min = shiftDay(today, 1);
+  document.getElementById('rest-list').innerHTML = up.map(k => `<div class="row"><div class="info"><div class="name">${dFmt(k, { weekday: 'long', day: 'numeric', month: 'long' })}</div><div class="meta">Jour de repos</div></div><button class="more" onclick="delRest('${k}')" aria-label="Retirer ce jour de repos">✕</button></div>`).join('');
+
+  document.getElementById('collection-list').innerHTML = state.collection.length
+    ? state.collection.slice().reverse().map(c => `<div class="row"><div class="sp-ico">${treeSVG(speciesOf(c.sp), 365, false)}</div><div class="info"><div class="name">${speciesOf(c.sp).name}</div><div class="meta">${c.days} jours · récolté le ${dFmt(c.d, { day: 'numeric', month: 'short', year: 'numeric' })}</div></div></div>`).join('')
+    : '<div class="empty"><p>Aucun arbre récolté. Menez un arbre jusqu\'à 365 jours.</p></div>';
+
   const dead = state.forest.slice(-8).reverse();
   document.getElementById('forest-list').innerHTML = dead.length
-    ? dead.map(f => `<div class="row dead"><div class="sp-ico">${treeSVG(speciesOf(f.sp), f.days, true)}</div><div class="info"><div class="name">${speciesOf(f.sp).name}</div><div class="meta">${f.days} jour${f.days > 1 ? 's' : ''} · fanée le ${new Date(f.d + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</div></div></div>`).join('')
+    ? dead.map(f => `<div class="row dead"><div class="sp-ico">${treeSVG(speciesOf(f.sp), f.days, true)}</div><div class="info"><div class="name">${speciesOf(f.sp).name}</div><div class="meta">${f.days} jour${f.days > 1 ? 's' : ''} · fanée le ${dFmt(f.d, { day: 'numeric', month: 'short' })}</div></div></div>`).join('')
     : '<div class="empty"><p>Aucune plante fanée pour l\'instant.</p></div>';
+}
+
+// --- Animations : épanouissement en fin de session, feuilles qui tombent ---
+function plantTarget() {
+  for (const el of [document.getElementById('plant'), document.querySelector('#garden-plant svg')]) {
+    if (!el || el.closest('.screen.hidden')) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > 20 && r.height > 20) return { el, r };
+  }
+  return null;
+}
+
+function fx(kind, n) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const p = plantTarget(), layer = document.getElementById('fx');
+  if (!p || !layer) return;
+  const { r } = p, cx = r.left + r.width / 2, cy = r.top + r.height * 0.4, rnd = Math.random;
+  for (let i = 0; i < n; i++) {
+    const e = document.createElement('i');
+    if (kind === 'bloom') {
+      e.className = 'fx-p';
+      e.style.cssText = `left:${cx + (rnd() - .5) * r.width * .5}px;top:${cy + (rnd() - .3) * r.height * .3}px;background:${['#F8C8DC', '#FFE29A', '#FFFFFF', '#BFE3A5'][i % 4]};--dx:${(rnd() - .5) * 110}px;--dy:${-30 - rnd() * 70}px;animation-delay:${rnd() * .4}s`;
+    } else {
+      e.className = 'fx-l';
+      e.style.cssText = `left:${cx + (rnd() - .5) * r.width * .45}px;top:${cy + (rnd() - .5) * r.height * .25}px;--dx:${(rnd() - .5) * 70}px;--dy:${r.height * .55 + rnd() * 20}px;--rot:${(rnd() - .5) * 540}deg;animation-delay:${i * .25}s`;
+    }
+    layer.appendChild(e);
+    setTimeout(() => e.remove(), 3500 + i * 250);
+  }
+  if (kind === 'bloom') {
+    p.el.classList.remove('bloom'); void p.el.getBoundingClientRect(); p.el.classList.add('bloom');
+    setTimeout(() => p.el.classList.remove('bloom'), 1500);
+  }
+}
+function bloomAnimation() { setTimeout(() => fx('bloom', 14), 250); }
+function leafFall(n) { setTimeout(() => fx('leaf', Math.min(6, n)), 700); }
+
+// --- Note de fin de session, attachée à la session et à la tâche ---
+let pendingNote = null;
+
+function openNote(entry) {
+  pendingNote = entry;
+  const tk = state.tasks.find(k => k.id === entry.task), n = state.distractions.length;
+  document.getElementById('note-ctx').textContent = (tk ? `Tâche : ${tk.title} · ` : '') + `${entry.m} min` + (n ? ` · ${n} distraction${n > 1 ? 's' : ''} à trier` : '');
+  document.getElementById('note-input').value = '';
+  document.getElementById('note-modal').classList.add('open');
+  setTimeout(() => document.getElementById('note-input').focus(), 300);
+}
+function skipNote() { document.getElementById('note-modal').classList.remove('open'); pendingNote = null; }
+function saveNote() {
+  const v = document.getElementById('note-input').value.trim();
+  if (v && pendingNote) {
+    pendingNote.n = v.slice(0, 240);
+    const tk = state.tasks.find(k => k.id === pendingNote.task);
+    if (tk) { tk.notes.push({ t: pendingNote.t, n: pendingNote.n }); if (tk.notes.length > 30) tk.notes.shift(); }
+    save(); renderLog(); renderTasks();
+  }
+  skipNote();
+}
+
+// --- Distractions : noter une pensée parasite sans quitter le timer ---
+function renderDistract() {
+  const n = state.distractions.length;
+  document.getElementById('distract').classList.toggle('on', state.timer.mode === 'focus');
+  document.getElementById('distract-count').textContent = n ? `Distractions (${n})` : 'Distractions';
+}
+function addDistraction() {
+  const i = document.getElementById('distract-input'), v = i.value.trim();
+  if (!v) return;
+  state.distractions.unshift({ id: Date.now(), t: v.slice(0, 80), at: Date.now(), task: state.activeTask });
+  if (state.distractions.length > 100) state.distractions.length = 100;
+  i.value = ''; i.blur(); save(); renderDistract();
+  showToast('Noté. Retour à la tâche.', 1500);
+}
+function renderDistractList() {
+  document.getElementById('dist-list').innerHTML = state.distractions.length
+    ? state.distractions.map(d => `<div class="di"><span>${esc(d.t)}</span><button class="link" onclick="distToTask(${d.id})">En tâche</button><button class="m" onclick="delDist(${d.id})" aria-label="Supprimer">✕</button></div>`).join('')
+    : '<div class="empty"><p>Aucune distraction notée.</p></div>';
+}
+function openDistractions() { renderDistractList(); document.getElementById('dist-modal').classList.add('open'); }
+function closeDistractions() { document.getElementById('dist-modal').classList.remove('open'); }
+function delDist(id) { state.distractions = state.distractions.filter(d => d.id !== id); save(); renderDistractList(); renderDistract(); }
+function clearDistractions() {
+  if (state.distractions.length && !confirm('Effacer toutes les distractions ?')) return;
+  state.distractions = []; save(); renderDistractList(); renderDistract();
+}
+function distToTask(id) {
+  const d = state.distractions.find(x => x.id === id); if (!d) return;
+  state.tasks.unshift({ id: Date.now(), title: d.t, cat: state.cats[0], color: COLORS[0], priority: 'normal', est: 0, subs: [], done: false, spent: 0, due: null, rec: null, plan: null, notes: [] });
+  state.distractions = state.distractions.filter(x => x.id !== id);
+  save(); renderDistractList(); renderDistract(); renderTasks(); renderTimerTasks();
+  showToast('Tâche créée');
+}
+
+// --- Journée et rappel de fin de journée ---
+const remindTime = at => `${String(Math.floor(at / 60)).padStart(2, '0')}:${String(at % 60).padStart(2, '0')}`;
+
+function adjDayStart(d) {
+  state.dayStart = Math.max(0, Math.min(8, state.dayStart + d));
+  refreshDaily(); renderStreakDots(); renderSessionCount(); renderGarden(); renderRemind();
+  save(); syncPush(); scheduleLocalReminder();
+}
+
+function renderRemind() {
+  const r = state.remind;
+  document.getElementById('remind-toggle').checked = r.on;
+  document.getElementById('remind-val').textContent = remindTime(r.at);
+  document.getElementById('daystart-val').textContent = state.dayStart + ' h';
+  document.getElementById('remind-status').textContent = !('Notification' in window) ? 'Notifications non prises en charge par ce navigateur'
+    : !r.on ? 'Désactivé'
+    : Notification.permission === 'denied' ? 'Notifications bloquées dans le navigateur'
+    : r.push ? 'Actif, même appli fermée'
+    : PUSH_SERVER ? (r.err ? 'Serveur de rappels injoignable : actif quand l\'appli est ouverte' : 'Connexion au serveur de rappels…')
+    : 'Actif quand l\'appli est ouverte (serveur push non configuré)';
+}
+
+async function setRemind(on) {
+  const r = state.remind;
+  if (on) {
+    if (!('Notification' in window)) { showToast('Notifications non prises en charge'); renderRemind(); return; }
+    let perm = Notification.permission;
+    if (perm === 'default') perm = await Notification.requestPermission();
+    if (perm !== 'granted') { r.on = false; save(); renderRemind(); showToast('Autorisez les notifications pour activer le rappel', 4000); return; }
+  }
+  r.on = on; save(); renderRemind();
+  await syncPush();
+  scheduleLocalReminder();
+}
+
+function adjRemind(d) {
+  const r = state.remind;
+  r.at = Math.max(720, Math.min(1410, r.at + d * 30));
+  save(); renderRemind(); syncPush(); scheduleLocalReminder();
+}
+
+function reminderText() {
+  const left = dayEndsAt() - Date.now(), when = left < 3600000 ? 'Il reste moins d\'une heure' : `Il vous reste ${Math.ceil(left / 3600000)} h`;
+  return when + (state.timer.streakDays > 0 ? ' pour sauver une feuille de votre arbre.' : ' pour planter votre graine.');
+}
+
+// Repli local : ne fonctionne que si l'appli est ouverte (le serveur push prend le relais sinon)
+let remindTimer = null;
+function scheduleLocalReminder() {
+  clearTimeout(remindTimer);
+  const r = state.remind;
+  if (!r.on || r.push || !('Notification' in window)) return;
+  const now = new Date(), tgt = new Date(now);
+  tgt.setHours(Math.floor(r.at / 60), r.at % 60, 0, 0);
+  if (tgt <= now) tgt.setDate(tgt.getDate() + 1);
+  remindTimer = setTimeout(() => {
+    const key = localDateKey();
+    if (state.timer.lastDate !== key && !state.rest.includes(key)) sendNotification('Seed', reminderText(), 'seed-reminder');
+    scheduleLocalReminder();
+  }, Math.min(tgt - now, 2147483647));
+}
+
+const b64ToU8 = b => Uint8Array.from(atob((b + '='.repeat((4 - b.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+
+// Abonnement Web Push + synchronisation de l'état utile au serveur (heure, fuseau, dernier jour validé, repos)
+function syncPush() { return (state.remind.on || state.remind.push) ? doSync() : Promise.resolve(); }
+async function doSync() {
+  const r = state.remind;
+  if (!PUSH_SERVER || !('serviceWorker' in navigator) || !('PushManager' in window)) { r.push = false; save(); renderRemind(); return; }
+  const post = body => fetch(PUSH_SERVER + '/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!r.on) {
+      if (sub) { await post({ sub: sub.toJSON(), on: false }); await sub.unsubscribe(); }
+      r.push = false;
+    } else {
+      if (!sub) {
+        const { key } = await (await fetch(PUSH_SERVER + '/vapid')).json();
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(key) });
+      }
+      const t = state.timer, today = localDateKey();
+      const res = await post({ sub: sub.toJSON(), on: true, tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        at: r.at, dayStart: state.dayStart, last: t.lastDate, streak: t.streakDays, rest: state.rest.filter(k => k >= today) });
+      if (!res.ok) throw new Error('sync ' + res.status);
+      r.push = true; r.err = false;
+    }
+  } catch (e) { r.push = false; r.err = true; console.warn('[push]', e); }
+  save(); renderRemind();
 }
 
 function toggleZen(on) {
@@ -927,9 +1305,12 @@ document.addEventListener('fullscreenchange', () => {
 
 // Raccourcis : espace = démarrer/pause, F = mode ciblé, Échap = fermer
 document.addEventListener('keydown', e => {
-  const modal = document.getElementById('add-task-modal').classList.contains('open');
+  const modal = document.querySelector('.modal-overlay.open');
   if (e.key === 'Escape') {
-    if (modal) closeAddTask(); else toggleZen(false);
+    if (!modal) toggleZen(false);
+    else if (modal.id === 'note-modal') skipNote();
+    else if (modal.id === 'dist-modal') closeDistractions();
+    else closeAddTask();
     return;
   }
   if (e.target.closest('input,textarea,select') || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -943,6 +1324,7 @@ document.addEventListener('keyup', e => {
 
 function handleSessionEnd(at = Date.now()) {
   const t = state.timer, late = Date.now() - at > 5000;
+  let entry = null;
   const feedback = () => { if (t.sound) playBeep(); if (t.haptic && navigator.vibrate) navigator.vibrate([200, 100, 200]); };
   if (t.mode === 'focus') {
     const day = localDateKey(new Date(at));
@@ -952,24 +1334,30 @@ function handleSessionEnd(at = Date.now()) {
     if (day === localDateKey()) t.sessions++;
     refreshDaily();
     const grew = t.lastDate !== day;
+    let healed = false;
     if (grew) {
       if (t.streakDays === 0) { state.dead = null; state.wilted = 0; }
       t.streakDays++;
       t.lastDate = day;
-      if (t.accounted && day <= t.accounted) state.wilted = Math.max(0, state.wilted - 1);
+      if (t.accounted && day <= t.accounted && !state.rest.includes(day)) state.wilted = Math.max(0, state.wilted - 1);
       else t.accounted = day;
+      if (++state.heal >= HEAL_EVERY) { state.heal = 0; if (state.wilted > 0) { state.wilted--; healed = true; } }
     }
     t.bestStreak = Math.max(t.bestStreak || 0, t.streakDays);
     const fresh = checkUnlocks();
-    let msg = fresh.length ? 'Nouvelle espèce débloquée : ' + fresh.map(s => s.name).join(', ') : grew ? 'Votre plante a grandi' : null;
+    let msg = fresh.length ? 'Nouvelle espèce débloquée : ' + fresh.map(s => s.name).join(', ')
+      : grew ? (healed ? 'Votre plante a grandi et une feuille a repoussé' : 'Votre plante a grandi') : null;
     const task = state.tasks.find(k => k.id === state.activeTask);
+    entry = { t: at, d: day, m: t.durations.focus, task: task ? task.id : null, tt: task ? task.title : '', cat: task ? task.cat : '', c: task ? task.color : '', n: '' };
+    state.log.push(entry);
+    if (state.log.length > 3000) state.log.splice(0, state.log.length - 3000);
     if (task) {
       task.spent++;
       if (task.est && task.spent === task.est && !fresh.length) msg = `Estimation atteinte : ${task.title}`;
     }
     if (msg) showToast(msg, 4000);
-    renderTimerTasks(); renderTasks(); renderStreakDots(); renderSessionCount();
-    feedback();
+    renderTimerTasks(); renderTasks(); renderStreakDots(); renderSessionCount(); renderGarden();
+    feedback(); bloomAnimation();
     sendNotification('Session terminée', `Prenez une vraie pause. ${t.sessions} session(s) aujourd'hui.`);
     checkNotifPermission();
     switchMode((t.sessions > 0 && t.sessions % 4 === 0) ? 'long' : 'short', null, true);
@@ -981,6 +1369,7 @@ function handleSessionEnd(at = Date.now()) {
     if (t.autoFocus && !late) toggleTimer();
   }
   save();
+  if (entry) { syncPush(); if (t.askNote) openNote(entry); }
 }
 
 init();

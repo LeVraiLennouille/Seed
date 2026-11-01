@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'seed-v2.5';
+const CACHE_VERSION = 'seed-v2.6';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
@@ -80,29 +80,25 @@ self.addEventListener('message', event => {
 });
 
 self.addEventListener('push', event => {
-  const data = event.data ? event.data.json() : {};
-  const title = data.title || 'Seed';
-  const options = {
-    body: data.body || 'Ta session est terminée !',
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) {}
+  event.waitUntil(self.registration.showNotification(data.title || 'Seed', {
+    body: data.body || 'Il reste du temps pour valider votre journée.',
+    tag: data.tag || 'seed-reminder',
     icon: './assets/icon-192.png',
     badge: './assets/icon-192.png',
     vibrate: [200, 100, 200],
-    data: { url: data.url || './' },
-    actions: [
-      { action: 'open',   title: '▶ Démarrer la pause' },
-      { action: 'close',  title: '✕ Ignorer' }
-    ]
-  };
-  event.waitUntil(self.registration.showNotification(title, options));
+    data: { url: './index.html#timer' },
+    actions: [{ action: 'open', title: 'Ouvrir Seed' }]
+  }));
 });
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  if (event.action === 'close') return;
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       if (list.length) return list[0].focus();
-      return clients.openWindow('./');
+      return clients.openWindow('./index.html#timer');
     })
   );
 });
