@@ -11,6 +11,8 @@
 <meta name="apple-mobile-web-app-title" content="Seed"/>
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png"/>
 <link rel="manifest" href="manifest.json"/>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg"/>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png"/>
 <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png"/>
 <title>Seed</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -20,6 +22,11 @@
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="68 94 364 312">
+    <ellipse cx="250.248" cy="380.361" rx="21.5218" ry="21.5218" fill="var(--moss)"/>
+    <path d="M225.769 170.677C189.492 120.041 142.142 98.1176 83.7253 98.1176C70.8118 135.012 67.4717 203.014 107.706 253.689C144.99 300.648 190.104 328.093 250.365 326.863C265.737 285.049 261.432 220.455 225.769 170.677Z" fill="var(--moss)"/>
+    <path d="M274.23 171.292C310.507 120.656 357.857 98.7329 416.274 98.7328C429.187 135.627 432.527 203.629 392.293 254.304C355.009 301.263 309.895 328.708 249.634 327.478C234.262 285.665 238.567 221.07 274.23 171.292Z" fill="var(--sprout)"/>
+  </symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z" fill="currentColor"/></symbol>
   <symbol id="i-skip" viewBox="0 0 24 24"><path d="M5 5l10 7-10 7zM18 5v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -38,7 +45,7 @@
 <div id="app" data-mode="focus">
 
 <section id="onboarding" class="screen ob">
-  <div class="ob-top"><span class="brand">Seed</span><button class="link" onclick="finishOnboarding()">Passer</button></div>
+  <div class="ob-top"><span class="brand"><svg class="mark" aria-hidden="true"><use href="#i-logo"/></svg>Seed</span><button class="link" onclick="finishOnboarding()">Passer</button></div>
   <div class="ob-slides" id="ob-slides">
     <div class="ob-slide" id="slide-0" style="transform:translateX(0)">
       <svg class="ob-art" viewBox="0 0 200 150" aria-hidden="true"><path d="M20 128h160" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><ellipse cx="100" cy="124" rx="10" ry="6.5" fill="var(--moss)"/></svg>
@@ -67,7 +74,7 @@
 
 <section id="timer" class="screen hidden">
   <header class="top">
-    <span class="brand">Seed</span>
+    <span class="brand"><svg class="mark" aria-hidden="true"><use href="#i-logo"/></svg>Seed</span>
     <div class="hbtns"><button class="icon-btn" onclick="toggleZen()" aria-label="Mode ciblé"><svg><use href="#i-focus"/></svg></button><button class="icon-btn" onclick="showScreen('settings')" aria-label="Paramètres"><svg><use href="#i-gear"/></svg></button></div>
   </header>
   <div class="modes" role="tablist">
@@ -197,7 +204,7 @@
     <div class="set-row"><div><strong>Écran allumé</strong><small>Empêche la mise en veille</small></div>
       <label class="tog"><input type="checkbox" id="wake-toggle" onchange="toggleWakeLock(this)"/><i></i></label></div>
   </div>
-  <p class="foot">Seed v2.7</p>
+  <p class="foot">Seed v3.0</p>
 </section>
 
 <div id="install-banner">

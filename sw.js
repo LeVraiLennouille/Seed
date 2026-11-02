@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'seed-v2.6';
+const CACHE_VERSION = 'seed-v2.7';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const CURRENT_CACHES = [STATIC_CACHE, RUNTIME_CACHE];
@@ -12,6 +12,8 @@ const STATIC_ASSETS = [
   './assets/icon-512.png',
   './assets/icon-512-maskable.png',
   './assets/apple-touch-icon.png',
+  './assets/favicon.svg',
+  './assets/favicon-32.png',
   'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Young+Serif&display=swap'
 ];
 
